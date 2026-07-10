@@ -1,0 +1,1032 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LSEI Scenario Knob Explorer</title>
+<style>
+  :root{
+    --ground:#0B1220; --panel:#141E30; --panel2:#1C2942; --line:#28374F;
+    --text:#E6EDF6; --muted:#8296B0; --ice:#54CBE3;
+    --good:#3FB984; --warn:#E0A83F; --crit:#E5654B;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace;
+    --r:10px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    background:radial-gradient(1200px 600px at 80% -10%, #10203a 0%, transparent 60%), var(--ground);
+    color:var(--text); font-family:var(--sans); line-height:1.5; padding:22px; min-height:100vh;
+  }
+  .wrap{max-width:1180px; margin:0 auto}
+  .lbl{font-family:var(--mono); font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted)}
+  .num{font-family:var(--mono); font-variant-numeric:tabular-nums}
+
+  header{display:flex; flex-wrap:wrap; align-items:flex-end; gap:16px 24px; margin-bottom:16px}
+  header .title h1{margin:0; font-size:22px; font-weight:650}
+  header .title p{margin:4px 0 0; color:var(--muted); font-size:13px; max-width:64ch}
+  header .title .tag{color:var(--ice)}
+  .presets{display:flex; gap:8px; margin-left:auto; flex-wrap:wrap; align-items:center}
+  .preset{font-family:var(--mono); font-size:12px; color:var(--text); background:var(--panel);
+    border:1px solid var(--line); border-radius:99px; padding:8px 14px; cursor:pointer; transition:.15s}
+  .preset:hover{border-color:var(--ice)}
+  .preset[aria-pressed="true"]{background:var(--ice); color:#06131c; border-color:var(--ice); font-weight:600}
+  .preset:focus-visible{outline:2px solid var(--ice); outline-offset:2px}
+  .refbtn{font-family:var(--mono); font-size:12px; color:var(--ice); background:transparent;
+    border:1px solid var(--line); border-radius:99px; padding:8px 14px; cursor:pointer}
+  .refbtn:hover{border-color:var(--ice)}
+
+  .phasebar{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:18px;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--r); padding:10px 14px}
+  .phasebar .flabel{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted)}
+  .phaseseg{display:flex; gap:6px}
+  .phaseseg button{font-family:var(--mono); font-size:12px; color:var(--text); background:var(--panel2);
+    border:1px solid var(--line); border-radius:7px; padding:8px 12px; cursor:pointer; transition:.13s}
+  .phaseseg button:hover{border-color:#3d5478}
+  .phaseseg button[aria-pressed="true"]{background:var(--ice); border-color:var(--ice); color:#06131c; font-weight:600}
+  .phaseseg button:focus-visible{outline:2px solid var(--ice); outline-offset:2px}
+  .envnote{margin-left:auto; font-family:var(--mono); font-size:12.5px; color:#9aaac2}
+  .envnote b{color:var(--ice)}
+
+  .grid{display:grid; grid-template-columns:360px 1fr; gap:18px; align-items:start}
+  @media (max-width:880px){ .grid{grid-template-columns:1fr} }
+  .card{background:var(--panel); border:1px solid var(--line); border-radius:var(--r)}
+  .console{padding:16px}
+
+  .tier{margin-bottom:6px}
+  .tierhead{display:flex; align-items:baseline; gap:8px; margin:2px 2px 12px}
+  .tierhead .k{color:var(--ice)} .tierhead .d{font-size:11px; color:var(--muted)}
+  .tier + .tier{margin-top:14px; padding-top:14px; border-top:1px solid var(--line)}
+
+  .knobs-grid{display:flex; flex-wrap:wrap; gap:14px 10px}
+  .knob-unit{display:flex; flex-direction:column; align-items:center; width:100px}
+  .ksvg{width:78px; height:78px; cursor:ns-resize; touch-action:none; display:block}
+  .ksvg:focus-visible{outline:2px solid var(--ice); outline-offset:3px; border-radius:50%}
+  .kval{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:15px; color:var(--ice); margin-top:6px; font-weight:600}
+  .kval .ku{color:var(--muted); font-size:11px; font-weight:400}
+  .klabel{font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-top:2px; text-align:center}
+  .kcap{font-family:var(--mono); font-size:11px; color:#9aaac2; margin-top:1px; text-align:center; min-height:13px}
+  .kchev{opacity:.55}
+  .knobhint{font-family:var(--mono); font-size:11px; color:#9aaac2; margin-top:14px; padding-top:10px; border-top:1px solid var(--line); letter-spacing:.02em}
+
+  .power-cluster{display:flex; align-items:center; gap:6px}
+  .fission-box{display:flex; flex-direction:column; align-items:flex-start; gap:6px; padding:6px 8px;
+    border:1px solid var(--line); border-radius:8px; background:var(--panel2)}
+  .fission-box .flabel{font-family:var(--mono); font-size:10px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+  .switch{display:inline-flex; align-items:center; gap:7px; cursor:pointer; user-select:none}
+  .switch input{position:absolute; opacity:0; width:0; height:0}
+  .track{width:38px; height:20px; border-radius:99px; background:#2b3a52; position:relative; transition:.18s; flex:none}
+  .track::after{content:""; position:absolute; top:2px; left:2px; width:16px; height:16px; border-radius:50%; background:#E6EDF6; transition:.18s}
+  .switch input:checked + .track{background:var(--ice)}
+  .switch input:checked + .track::after{transform:translateX(18px)}
+  .switch input:focus-visible + .track{outline:2px solid var(--ice); outline-offset:2px}
+  .switch .st{font-family:var(--mono); font-size:11px; color:var(--text)}
+
+  .seg{display:flex; gap:6px; margin-top:4px}
+  .seg button{flex:1; font-family:var(--mono); font-size:12px; color:var(--text); background:var(--panel2);
+    border:1px solid var(--line); border-radius:7px; padding:8px 4px; cursor:pointer; transition:.13s}
+  .seg button:hover{border-color:#3d5478}
+  .seg button[aria-pressed="true"]{background:var(--ice); border-color:var(--ice); color:#06131c; font-weight:600}
+  .seg button:focus-visible{outline:2px solid var(--ice); outline-offset:2px}
+  .funding-wrap{margin-top:8px; flex:1 1 100%}
+  .funding-wrap .flabel{font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+  .funding-wrap .fsub{font-family:var(--mono); font-size:11px; color:#9aaac2; margin-top:3px}
+
+  .readout{display:flex; flex-direction:column; gap:16px}
+  .scene{padding:18px 20px; border-left:4px solid var(--line); transition:border-color .25s}
+  .scene.ok{border-left-color:var(--good)} .scene.no{border-left-color:var(--warn)}
+  .scene .top{display:flex; align-items:center; gap:12px; flex-wrap:wrap}
+  .scene h2{margin:0; font-size:18px; font-weight:650}
+  .pill{font-family:var(--mono); font-size:11px; letter-spacing:.06em; text-transform:uppercase; padding:4px 10px; border-radius:99px; border:1px solid}
+  .pill.ok{color:var(--good); border-color:color-mix(in srgb,var(--good) 55%,transparent); background:color-mix(in srgb,var(--good) 12%,transparent)}
+  .pill.no{color:var(--warn); border-color:color-mix(in srgb,var(--warn) 55%,transparent); background:color-mix(in srgb,var(--warn) 12%,transparent)}
+  .scene .named{margin-left:auto; font-family:var(--mono); font-size:11px; color:var(--muted)}
+  .scene p.body{margin:12px 0 0; font-size:14px; color:#d3dcea; max-width:70ch}
+  .scene .need{margin-top:12px; font-family:var(--mono); font-size:12px; color:var(--muted)}
+  .scene .need b{color:var(--ice)}
+
+  .massbar{margin-top:14px}
+  .massbar .track2{height:16px; border-radius:5px; overflow:hidden; display:flex; background:#0e1626; border:1px solid var(--line)}
+  .massbar .seg-p{background:var(--warn)} .massbar .seg-m{background:var(--ice)} .massbar .seg-over{background:var(--crit)}
+  .massbar .key{display:flex; gap:16px; margin-top:6px; font-family:var(--mono); font-size:11px; color:var(--muted)}
+  .massbar .key i{width:9px; height:9px; border-radius:2px; display:inline-block; margin-right:5px}
+
+  .outs{display:grid; grid-template-columns:repeat(4,1fr); gap:12px}
+  @media (max-width:640px){ .outs{grid-template-columns:repeat(2,1fr)} }
+  .out{background:var(--panel2); border:1px solid var(--line); border-radius:var(--r); padding:13px 14px;
+    position:relative; overflow:hidden; min-height:112px; display:flex; flex-direction:column; justify-content:space-between}
+  .out .swatch{position:absolute; inset:0 0 auto 0; height:4px; transition:background .3s}
+  .out .oname{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-family:var(--mono)}
+  .out .ovalue{font-family:var(--mono); font-variant-numeric:tabular-nums; font-size:24px; font-weight:600; line-height:1; margin-top:8px; transition:color .3s}
+  .out .ounit{font-family:var(--mono); font-size:11px; color:var(--muted); margin-left:3px}
+  .out .ocap{font-size:11px; color:var(--muted); margin-top:6px; min-height:14px}
+  .out .ocap.bind{color:var(--warn); font-family:var(--mono)}
+
+  .lower{display:grid; grid-template-columns:1fr 260px; gap:16px; align-items:start}
+  @media (max-width:880px){ .lower{grid-template-columns:1fr} }
+  .fieldcard{padding:14px}
+  .fieldhead{display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px}
+  canvas{width:100%; height:auto; display:block; border-radius:6px}
+  .legend{padding:14px; font-size:12px; color:var(--muted)}
+  .legend h3{margin:0 0 8px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-family:var(--mono)}
+  .legend .sw{display:flex; align-items:center; gap:8px; margin:6px 0}
+  .legend .sw i{width:14px; height:10px; border-radius:2px; display:inline-block; flex:none}
+  .legend ul{margin:10px 0 0; padding-left:16px} .legend li{margin:3px 0}
+
+  /* Separation strip — the hero: three funding postures on one log axis */
+  .sepstrip{padding:16px 20px 12px; border-color:#33465f}
+  .sephead{display:flex; align-items:baseline; gap:12px; flex-wrap:wrap}
+  .septitle{font-size:15px; font-weight:600; color:var(--text)}
+  .septitle b{color:var(--ice)}
+  .seplog{margin-left:auto; font-family:var(--mono); font-size:11px; letter-spacing:.09em; text-transform:uppercase; color:#9aaac2}
+  .sepplot{position:relative; height:176px; margin-top:8px}
+  .sepbase{position:absolute; top:125px; left:0; right:0; height:2px; background:#3a4d68; border-radius:2px}
+  .sepgrid{position:absolute; top:12px; height:114px; width:1px; background:var(--line); opacity:.7}
+  .sepgridlab{position:absolute; top:132px; transform:translateX(-50%); font-family:var(--mono); font-size:11px; color:#9aaac2; white-space:nowrap}
+  .sepmark{position:absolute; bottom:44px; transform:translateX(-50%); display:flex; flex-direction:column-reverse; align-items:center;
+    transition:left .55s cubic-bezier(.4,0,.2,1); z-index:2}
+  .sepmark .mkdot{width:11px; height:11px; border-radius:50%; border:2px solid var(--ground); box-sizing:content-box}
+  .sepmark .mkstem{width:2px; background:#3a4d68; margin-bottom:2px}
+  .sepmark .mkname{font-family:var(--mono); font-size:11px; letter-spacing:.05em; text-transform:uppercase; margin-bottom:2px; white-space:nowrap}
+  .sepmark .mkval{font-family:var(--mono); font-variant-numeric:tabular-nums; font-weight:600; line-height:1; white-space:nowrap; transition:color .3s}
+  .sepmark .mkval .mkunit{font-size:10px; color:var(--muted); font-weight:400}
+  .sepmark.ctx .mkval{font-size:16px; color:#c8d4e6}
+  .sepmark.ctx .mkname{color:var(--muted)}
+  .sepmark.ctx .mkdot{background:#8296b0}
+  .sepmark.act .mkval{font-size:28px; color:var(--ice)}
+  .sepmark.act .mkname{color:var(--ice); font-weight:600}
+  .sepmark.act .mkstem{background:color-mix(in srgb,var(--ice) 55%,transparent); width:2.5px}
+  .sepmark.act .mkdot{width:14px; height:14px; background:var(--ice); box-shadow:0 0 0 5px color-mix(in srgb,var(--ice) 20%,transparent)}
+  .sepcap{font-family:var(--mono); font-size:12px; color:#9aaac2; margin-top:6px}
+  .sepcap b{color:#c8d4e6}
+
+  /* Reference / equations page */
+  .refpage{margin-top:18px; padding:20px 22px}
+  .refpage[hidden]{display:none}
+  .refpage h2{margin:0 0 4px; font-size:18px}
+  .refpage h3{margin:22px 0 8px; font-size:13px; font-family:var(--mono); letter-spacing:.06em; text-transform:uppercase; color:var(--ice)}
+  .refpage p{font-size:13px; color:#c9d5e6; max-width:88ch}
+  .reftbl{width:100%; border-collapse:collapse; margin-top:8px; font-size:12.5px}
+  .reftbl th,.reftbl td{border:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top}
+  .reftbl th{background:var(--panel2); font-family:var(--mono); font-size:11px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted)}
+  .reftbl td.eq{font-family:var(--mono); color:#bfe9f4; white-space:nowrap}
+  .reftbl td.mono{font-family:var(--mono)}
+  .badge{font-family:var(--mono); font-size:10px; padding:2px 7px; border-radius:99px; border:1px solid; white-space:nowrap}
+  .badge.src{color:var(--good); border-color:color-mix(in srgb,var(--good) 55%,transparent); background:color-mix(in srgb,var(--good) 12%,transparent)}
+  .badge.asm{color:var(--warn); border-color:color-mix(in srgb,var(--warn) 55%,transparent); background:color-mix(in srgb,var(--warn) 12%,transparent)}
+  .badge.ctl{color:var(--ice); border-color:color-mix(in srgb,var(--ice) 55%,transparent); background:color-mix(in srgb,var(--ice) 12%,transparent)}
+  .refscroll{overflow-x:auto}
+  .badgelegend{display:flex; gap:8px 14px; flex-wrap:wrap; align-items:center; font-size:12px; color:#c9d5e6; margin:8px 0 2px}
+  .badgelegend span.lg{display:inline-flex; align-items:center; gap:6px}
+
+  /* dev self-check panel */
+  .devpanel{margin-top:18px; padding:16px 18px}
+  .devpanel[hidden]{display:none}
+  .devpanel h2{margin:0 0 10px; font-size:15px}
+  .devtbl{width:100%; border-collapse:collapse; font-size:12px; font-family:var(--mono)}
+  .devtbl th,.devtbl td{border:1px solid var(--line); padding:5px 8px; text-align:left}
+  .devtbl th{background:var(--panel2); color:var(--muted)}
+  .devtbl .p{color:var(--good)} .devtbl .f{color:var(--crit); font-weight:700}
+  .devsum{font-family:var(--mono); font-size:13px; margin:10px 0}
+
+  footer{margin-top:22px; color:var(--muted); font-size:12px; max-width:88ch}
+  footer code{font-family:var(--mono); color:#a9bad6}
+  footer a{color:var(--ice); cursor:pointer}
+  @media (prefers-reduced-motion:reduce){ *{transition:none !important} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title">
+      <h1>LSEI Scenario Knob Explorer <span class="lbl">v1 · calibrated to the proposal</span></h1>
+      <p>Set the geology (<span class="tag">ice</span>), the <span class="tag">funding posture</span>, and the phase. Funding sets how much power and landed mass the program can field; <span class="tag">fission</span> decides whether that power costs mass. <b>Water is an output</b>: it is computed, never dialed.</p>
+    </div>
+    <div class="presets" id="presets" role="group" aria-label="Named scenarios"></div>
+    <button class="refbtn" id="refToggle" type="button" aria-expanded="false">Equations &amp; sources</button>
+  </header>
+
+  <div class="phasebar">
+    <span class="flabel">Phase</span>
+    <div class="phaseseg" id="phaseSeg" role="group" aria-label="Program phase"></div>
+    <span class="envnote" id="envNote"></span>
+  </div>
+
+  <div class="grid">
+    <div class="card console" id="console"></div>
+
+    <div class="readout">
+      <div class="card sepstrip" id="sepstrip">
+        <div class="sephead">
+          <span class="septitle" id="sepTitle">Water production: three funding postures</span>
+          <span class="seplog">log scale &middot; t/yr</span>
+        </div>
+        <div class="sepplot" id="sepPlot"></div>
+        <div class="sepcap" id="sepCap"></div>
+      </div>
+
+      <div class="card scene" id="scene">
+        <div class="top">
+          <h2 id="sceneName">&mdash;</h2>
+          <span class="pill" id="scenePill">&mdash;</span>
+          <span class="named" id="sceneNamed"></span>
+        </div>
+        <p class="body" id="sceneBody"></p>
+        <div class="need" id="sceneNeed"></div>
+        <div class="massbar">
+          <div class="track2" id="massTrack"><div class="seg-p" id="segP"></div><div class="seg-m" id="segM"></div></div>
+          <div class="key">
+            <span><i style="background:var(--warn)"></i><span id="keyP">power system &mdash;</span></span>
+            <span><i style="background:var(--ice)"></i><span id="keyM">mining plant &mdash;</span></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="outs" id="outs"></div>
+
+      <div class="lower">
+        <div class="card fieldcard">
+          <div class="fieldhead">
+            <span class="lbl">Operating regime &middot; where does water scale with power?</span>
+            <span class="lbl" id="fieldTag"></span>
+          </div>
+          <canvas id="field" width="600" height="380" aria-label="Water-limiting regime over landed mass and power"></canvas>
+        </div>
+        <div class="card legend">
+          <h3>Reading it</h3>
+          <div class="sw"><i style="background:var(--good)"></i>power-limited (water &prop; power)</div>
+          <div class="sw"><i style="background:var(--warn)"></i>mass-limited (plant / power system starves the line)</div>
+          <div class="sw"><i style="background:#fff"></i>your current knobs</div>
+          <ul>
+            <li>X = landed mass, Y = power (log scale).</li>
+            <li>Toggle <b>fission</b> and watch the green region jump: solar eats mining mass.</li>
+            <li>Brighter green = more water at that point.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <section class="card refpage" id="refpage" hidden aria-label="Equations and sources"></section>
+  <section class="card devpanel" id="devpanel" hidden aria-label="Developer self-check"></section>
+
+  <footer>
+    <b>v1: calibrated physics.</b> Every coefficient traces to the winning proposal (Table&nbsp;4, the Production Architecture Basis, and the three scenario tables) or is flagged as an assumption on the <a id="refLink">Equations &amp; sources</a> page. Water production reproduces the proposal truth set (Artemis 1/32/107, Contested &lt;1/1/3, Commercial 1/86/714 t/yr). Coefficients live in <code>CONFIG</code>; the physics is a DOM-free <code>model()</code> block that both the app and the test harness call. <a id="devLink">Run self-check</a>.
+  </footer>
+</div>
+
+<script>
+/* ============================================================
+   MODEL-CORE:START
+   DOM-free physics. No reads from document / state / UI.
+   Shared verbatim by (a) the app, (b) the in-page self-check,
+   and (c) the Node sidecar cr_scratch/step3p8_tests.mjs, which
+   extracts everything between the START/END markers and evals it.
+   ============================================================ */
+/* ===== MODEL-CORE:START ===== */
+const CONFIG = {
+  kP:        {value:0.142, unit:'t·yr⁻¹·kWe⁻¹·wt%⁻¹',
+              source:'Proposal Table 4, both anchors (100 t/yr @5wt% → 125–156 kW; @1wt% → 625–780 kW)',
+              status:'SOURCED', note:'Identity: kP = H·duty/E1 = 0.142. Computed via the energy form below.'},
+  E1:        {value:37000, unit:'kWh / t H₂O @ 1 wt%',
+              source:'Derived from Table 4 + H·duty; replaces v0.2\'s 4,500 (which read 8.2× hot)',
+              status:'SOURCED (derived)', note:'Specific energy scales 1/ice: e(ice)=E1/ice.'},
+  H:         {value:8766, unit:'h / yr', source:'Calendar constant', status:'CONSTANT', note:''},
+  duty:      {value:0.60, unit:'—', source:'Active-extraction fraction of calendar time',
+              status:'ASSUMPTION', note:'Jointly pinned with E1 to reproduce Table 4; do not change one without the other.'},
+  captureEff:{value:1.00, unit:'—', source:'Proposal Production Architecture Basis (ratios = 100/ice imply ~100% liberation)',
+              status:'SOURCED value / flagged', note:'Real thermal extraction ~0.8-0.9; 1.0 matches the proposal.'},
+  fFis:      {value:0.15, unit:'t / kWe', source:'NASA Fission Surface Power, 40 kWe class < 6 t → 0.15',
+              status:'SOURCED', note:'No fixed base adder (0.15 already includes the unit).'},
+  fSol:      {value:2.5, unit:'t / kWe', source:'PSR night-survival battery mass: 354 h × 1 kW / 200 Wh·kg⁻¹ ≈ 1.77 t/kWe before arrays/PMAD',
+              status:'ASSUMPTION (anchored)', note:'PSRs get no direct sunlight (proposal Table 3); continuous solar is battery-dominated.'},
+  kExc:      {value:4, unit:'t regolith·yr⁻¹ / t plant',
+              source:'NONE in the proposal; thermal mining is slow',
+              status:'ASSUMPTION (calibrated-to-fit)', note:'Chosen so scenario points are power-limited and fission-off flips to mass. Expect the first CSA question here.'},
+  eSinter:   {value:3, unit:'MJ / kg product (= 833 kWh/t)', source:'Sintering literature: sensible heat to ~1,100°C ≈ 0.9 MJ/kg × process factor',
+              status:'ASSUMPTION', note:'Not a proposal number. "Lower energy" is relative to O₂/metal reduction, not absolute.'},
+  ySinter:   {value:0.85, unit:'t product / t feed', source:'Sintering consolidates feed with little mass loss',
+              status:'ASSUMPTION', note:''},
+  phiCRef:   {value:0.75, unit:'—', source:'Construction-emphasis reference allocation for the "construction potential" readout',
+              status:'CONTROL (display ref)', note:'What construction would yield if the program reallocated ~3/4 of its plant to sintering.'}
+};
+
+/* Funding posture × phase → (power, landed-mass) envelope ceiling + fission default.
+   Verbatim from the proposal's three scenario parameter tables. */
+const ENVELOPE = {
+  low:  {'2030':{P:1,  M:10,   fission:false}, '2040':{P:10, M:75,   fission:false}, '2055':{P:20,  M:150,  fission:true}},
+  med:  {'2030':{P:1,  M:10,   fission:false}, '2040':{P:45, M:200,  fission:true},  '2055':{P:150, M:1000, fission:true}},
+  high: {'2030':{P:1,  M:10,   fission:false}, '2040':{P:120,M:1000, fission:true},  '2055':{P:1000,M:10000,fission:true}}
+};
+function envelope(funding, phase){ return ENVELOPE[funding][phase]; }
+
+/* Knob detents (also used headless for detent-representability tests). */
+const DETENTS = {
+  ice:   [1,1.5,2,2.5,3,4,5,5.6,7,8.5,10,13,15,20,25,30],
+  power: [1,2,3,5,10,20,30,45,70,100,120,150,250,450,700,1000],
+  mass:  [10,20,35,55,75,150,200,350,550,850,1000,1600,2800,4800,7000,10000],
+  phi_c: [0,0.05,0.1,0.15,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0]
+};
+function nearestIdx(arr,v){ let bi=0,bd=Infinity; for(let i=0;i<arr.length;i++){const d=Math.abs(arr[i]-v); if(d<bd){bd=d;bi=i;}} return bi; }
+function snapVal(key,v){ return DETENTS[key][nearestIdx(DETENTS[key],v)]; }
+const clamp01 = x => Math.max(0, Math.min(1, x));
+
+/* ---- THE MODEL ---------------------------------------------------
+   Explicit args only. Returns outputs; reads nothing external.
+   a = {ice, power, mass, fission, funding?, phase?, phi_c?}
+   ------------------------------------------------------------------ */
+function model(a){
+  const ice = a.ice, power = a.power, mass = a.mass, fission = !!a.fission;
+  const phi = Math.max(0, Math.min(1, a.phi_c || 0));
+  const H = CONFIG.H.value, duty = CONFIG.duty.value, E1 = CONFIG.E1.value;
+  const cap100 = CONFIG.captureEff.value;
+
+  const eEE = E1 / ice;              // kWh per t water (energy form, E1')
+  const rho = 100 / ice;            // regolith:water ratio (E2)
+
+  // E1'/E1: power-limited water at full power (t/yr) = kP*ice*power
+  const Wpower = power * H * duty / eEE;
+
+  // Power-system mass and the mining budget (E4, E5)
+  const mPwr   = fission ? CONFIG.fFis.value * power : CONFIG.fSol.value * power;
+  const mining = Math.max(0, mass - mPwr);
+
+  // Plant throughput capacity and the throughput-limited water (E6, E7)
+  const Rcap = CONFIG.kExc.value * mining;             // t regolith / yr
+  const Wthr = (Rcap / rho) * cap100;                 // throughput-limited water
+  const cap  = Math.min(Wpower, Wthr);                // achievable water at phi_c = 0
+
+  // Binding constraint (E9)
+  let binding;
+  if (mining <= 0)          binding = 'power-system mass';
+  else if (Wpower <= Wthr)  binding = 'power';
+  else                      binding = 'landed mass';
+  const feasible = (binding === 'power');             // power-limited = the healthy regime
+  const regime   = feasible ? 'power-limited' : 'mass-limited';
+
+  // Construction allocation (E8). Water and construction share power+plant linearly.
+  const eSinKWhT = CONFIG.eSinter.value * 1000 / 3.6; // MJ/kg -> kWh/t
+  const Cpower   = power * H * duty / eSinKWhT;        // if all power -> sinter
+  const Cthr     = CONFIG.ySinter.value * Rcap;       // if all plant -> sinter
+  const Cfull    = Math.min(Cpower, Cthr);            // sintered product at full allocation
+
+  const water = (1 - phi) * cap;                       // water at the live phi_c
+  const construction = phi * Cfull;                    // construction at the live phi_c
+  const constructionPotential = CONFIG.phiCRef.value * Cfull; // "if reallocated" readout
+  const regolith = water * rho;                        // feedstock the water line moves
+
+  // Envelope utilisation (only if funding+phase supplied)
+  let envPowerFrac = null, envMassFrac = null;
+  if (a.funding && a.phase && ENVELOPE[a.funding] && ENVELOPE[a.funding][a.phase]){
+    const e = ENVELOPE[a.funding][a.phase];
+    envPowerFrac = e.P > 0 ? power / e.P : 0;
+    envMassFrac  = e.M > 0 ? mass  / e.M : 0;
+  }
+
+  return {
+    ice, power, mass, fission, phi_c:phi,
+    eEE, rho, Wpower, Wthr, cap, mPwr, mining, Rcap,
+    binding, regime, feasible,
+    water, construction, constructionPotential, Cfull, regolith,
+    envPowerFrac, envMassFrac
+  };
+}
+
+/* ============================================================
+   TEST HARNESS  —  runTests() returns [{id, tier, name, pass, detail}]
+   The Node sidecar and the in-page panel both call this.
+   fileText (optional) enables the E2-guard source-string tripwire.
+   ============================================================ */
+function runTests(fileText){
+  const R = [];
+  const rec = (id,tier,name,pass,detail)=>R.push({id,tier,name,pass:!!pass,detail:detail||''});
+  const rel = (a,b)=> Math.abs(a-b)/Math.abs(b);
+
+  // ---- truth set + operating points (from the proposal, via the test plan) ----
+  const CELLS = [
+    {id:'S1/Prospecting', ice:5, funding:'med',  phase:'2030', truth:1},
+    {id:'S1/Pilot',       ice:5, funding:'med',  phase:'2040', truth:32},
+    {id:'S1/Sustained',   ice:5, funding:'med',  phase:'2055', truth:107},
+    {id:'S2/Prospecting', ice:1, funding:'low',  phase:'2030', truth:'<1'},
+    {id:'S2/Pilot',       ice:1, funding:'low',  phase:'2040', truth:1},
+    {id:'S2/Sustained',   ice:1, funding:'low',  phase:'2055', truth:3},
+    {id:'S3/Prospecting', ice:5, funding:'high', phase:'2030', truth:1},
+    {id:'S3/Pilot',       ice:5, funding:'high', phase:'2040', truth:86},
+    {id:'S3/Sustained',   ice:5, funding:'high', phase:'2055', truth:714}
+  ];
+  // tolerance rule (test plan §2). mode 'A1' precise, 'A1p' looser detent band.
+  function withinTruth(truth, val, mode){
+    const relTol = mode==='A1' ? 0.25 : 0.40;
+    const absTol = mode==='A1' ? 0.5  : 0.7;
+    if (truth === '<1') return val > 0 && val < (mode==='A1' ? 1.0 : 1.5);
+    if (truth < 2)      return Math.abs(val - truth) <= absTol;
+    return Math.abs(val - truth) / truth <= relTol;
+  }
+  function waterAt(c, snap){
+    const e = envelope(c.funding, c.phase);
+    const ice   = snap ? snapVal('ice', c.ice)   : c.ice;
+    const power = snap ? snapVal('power', e.P)    : e.P;
+    const mass  = snap ? snapVal('mass', e.M)     : e.M;
+    return model({ice, power, mass, fission:e.fission, funding:c.funding, phase:c.phase, phi_c:0}).water;
+  }
+
+  // A1 — preset × phase reproduces the proposal (GATE, all 9)
+  let a1ok=true, a1d=[];
+  for (const c of CELLS){ const w=waterAt(c,false); const ok=withinTruth(c.truth,w,'A1');
+    a1ok = a1ok && ok; a1d.push(`${c.id}=${w.toFixed(2)}${ok?'':' (X vs '+c.truth+')'}`); }
+  rec('A1','GATE','preset × phase reproduces the proposal truth set', a1ok, a1d.join('  '));
+
+  // A1' — detent representability (GATE)
+  let a1pok=true, a1pd=[];
+  for (const c of CELLS){ const w=waterAt(c,true); const ok=withinTruth(c.truth,w,'A1p');
+    a1pok = a1pok && ok; a1pd.push(`${c.id}=${w.toFixed(2)}${ok?'':' (X)'}`); }
+  rec("A1'",'GATE','operating points reachable by detents (±40% / ±0.7)', a1pok, a1pd.join('  '));
+
+  // A2 — 5 wt% power backbone witness (GATE)
+  let a2ok=true, a2d=[];
+  for (const P of [10,20,45,70,100,150]){ const w=model({ice:5,power:P,mass:10000,fission:true}).water;
+    const ok=rel(w,0.71*P)<=0.25; a2ok=a2ok&&ok; a2d.push(`${P}kW->${w.toFixed(1)}`); }
+  rec('A2','GATE','5 wt% backbone: water ≈ 0.71·power (no compensating-error mask)', a2ok, a2d.join('  '));
+
+  // A3 — 1 wt% ice-scaling witness (GATE)
+  {
+    const w5=model({ice:5,power:100,mass:10000,fission:true}).water;
+    const w1=model({ice:1,power:100,mass:10000,fission:true}).water;
+    const ratio=w1/w5, okR=rel(ratio,0.20)<=0.25, okB=rel(w1,0.14*100)<=0.25;
+    rec('A3','GATE','1 wt% scaling: energy/t ≈ 5× (water→0.20×)', okR&&okB, `ratio=${ratio.toFixed(3)} w1=${w1.toFixed(2)}`);
+  }
+
+  // A4 — every coefficient sourced (GATE)
+  {
+    const bad=Object.entries(CONFIG).filter(([k,v])=>!(v.source&&v.source.length&&v.status&&v.status.length)).map(([k])=>k);
+    rec('A4','GATE','every CONFIG coefficient carries a source + status', bad.length===0, bad.length?('missing: '+bad.join(',')):'all '+Object.keys(CONFIG).length+' sourced');
+  }
+
+  // B1 — monotonicity on capacity (GATE)
+  {
+    let mono=true, why='';
+    const nonDec=(vals,tag)=>{ for(let i=1;i<vals.length;i++){ if(vals[i] < vals[i-1]-1e-9){ mono=false; why=`${tag} drops ${vals[i-1].toFixed(3)}->${vals[i].toFixed(3)}`; return; } } };
+    // ice: monotone at any config
+    for (const bg of [{power:100,mass:5000,fission:true},{power:20,mass:150,fission:false}])
+      nonDec(DETENTS.ice.map(ice=>model({ice,...bg}).cap),'ice');
+    // mass: monotone at any config
+    for (const bg of [{ice:5,power:100,fission:true},{ice:1,power:45,fission:false}])
+      nonDec(DETENTS.mass.map(mass=>model({mass,...bg}).cap),'mass');
+    // power: tested in the mass-ample regime (couples to the envelope in the app; here we isolate the intended sign)
+    for (const bg of [{ice:5,mass:10000,fission:true},{ice:5,mass:10000,fission:false},{ice:15,mass:10000,fission:true}])
+      nonDec(DETENTS.power.map(power=>model({power,...bg}).cap),'power');
+    // funding: inert to cap at fixed power/mass -> constant -> non-decreasing
+    for (const bg of [{ice:5,power:150,mass:1000,fission:true}])
+      nonDec(['low','med','high'].map(funding=>model({funding,phase:'2055',...bg}).cap),'funding');
+    rec('B1','GATE','capacity non-decreasing in ice, power, mass, funding', mono, mono?'monotone across sweeps':why);
+  }
+
+  // B2 — fission-off infeasibility flip on the CALIBRATED model (GATE)
+  {
+    const on =model({ice:5,power:45,mass:200,fission:true});
+    const off=model({ice:5,power:45,mass:200,fission:false});
+    const flip = on.feasible===true && off.feasible===false
+              && (off.binding==='landed mass'||off.binding==='power-system mass');
+    const drop = (on.water-off.water)/on.water;
+    rec('B2','GATE','fission-off flips Artemis-Pilot power→mass', flip && drop>=0.30,
+        `ON ${on.water.toFixed(1)} (${on.binding}) / OFF ${off.water.toFixed(1)} (${off.binding}), drop ${(drop*100).toFixed(0)}%`);
+  }
+
+  // B3 — binding label truthful (REVIEW)
+  {
+    let ok=true, why='';
+    const pts=[{ice:5,power:45,mass:200,fission:false},{ice:1,power:20,mass:150,fission:true},
+               {ice:5,power:100,mass:60,fission:false},{ice:5,power:150,mass:1000,fission:true}];
+    for (const p of pts){ const m=model(p);
+      let exp = m.mining<=0?'power-system mass':(m.Wpower<=m.Wthr?'power':'landed mass');
+      if (exp!==m.binding){ ok=false; why=`${JSON.stringify(p)} said ${m.binding} expected ${exp}`; } }
+    rec('B3','REVIEW','binding label matches the active limit', ok, ok?'labels truthful':why);
+  }
+
+  // B4 — no NaN / Inf at the rails (GATE)
+  {
+    let ok=true, why='';
+    const rails=(arr)=>[arr[0],arr[arr.length-1]];
+    for (const ice of rails(DETENTS.ice)) for (const power of rails(DETENTS.power))
+      for (const mass of rails(DETENTS.mass)) for (const phi_c of rails(DETENTS.phi_c))
+        for (const fission of [true,false]) for (const funding of ['low','med','high']){
+          const m=model({ice,power,mass,fission,phi_c,funding,phase:'2055'});
+          for (const [k,val] of Object.entries(m)){
+            if (typeof val==='number' && !Number.isFinite(val)){ ok=false; why=`${k}=${val} at ice${ice} P${power} M${mass}`; }
+          }
+        }
+    rec('B4','GATE','no NaN/Inf across the full knob-rail fuzz sweep', ok, ok?'all outputs finite':why);
+  }
+
+  // C1 — ≥2 orders of magnitude at Sustained (GATE)
+  {
+    const con=waterAt({ice:1,funding:'low', phase:'2055'},false);
+    const art=waterAt({ice:5,funding:'med', phase:'2055'},false);
+    const com=waterAt({ice:5,funding:'high',phase:'2055'},false);
+    const mx=Math.max(con,art,com), mn=Math.min(con,art,com), orders=Math.log10(mx/mn);
+    rec('C1','GATE','≥2 orders separation at Sustained', orders>=2.0, `con ${con.toFixed(2)} / art ${art.toFixed(1)} / com ${com.toFixed(0)} = ${orders.toFixed(2)} orders`);
+  }
+
+  // C2 — the two independent variables each move the outcome (GATE)
+  {
+    const bg={power:150,mass:1000,fission:true};
+    const w5=model({ice:5,...bg}).water, w1=model({ice:1,...bg}).water;
+    const iceRatio=w5/w1, okIce=rel(iceRatio,5)<=0.25;
+    const wMed =model({ice:5,power:150, mass:1000, fission:true}).water;
+    const wHigh=model({ice:5,power:1000,mass:10000,fission:true}).water;
+    const invRatio=wHigh/wMed, okInv=(invRatio>=5.0 && invRatio<=8.34);
+    rec('C2','GATE','ice-only ≈5× down; invest-only ≈6-7× up', okIce&&okInv, `ice ${iceRatio.toFixed(2)}×  invest ${invRatio.toFixed(2)}×`);
+  }
+
+  // F — funding moves the achievable envelope (GATE)
+  {
+    const caps=['low','med','high'].map(f=>{ const e=envelope(f,'2055');
+      return model({ice:5,power:e.P,mass:e.M,fission:e.fission,funding:f,phase:'2055'}).cap; });
+    const strictUp = caps[1]>caps[0]+1e-9 && caps[2]>caps[1]+1e-9;
+    const jump = caps[2]/caps[1], okJump=(jump>=5.0 && jump<=8.34);
+    rec('F','GATE','funding strictly raises the envelope; med→high = S2→S3 jump', strictUp&&okJump,
+        `caps ${caps.map(c=>c.toFixed(1)).join(' < ')}  med→high ${jump.toFixed(2)}×`);
+  }
+
+  // D1 — construction present + Contested-dominant (REVIEW)
+  {
+    const share=(ice,f)=>{ const e=envelope(f,'2055'); const m=model({ice,power:e.P,mass:e.M,fission:e.fission});
+      return m.constructionPotential/(m.constructionPotential+m.water); };
+    const con=share(1,'low'), art=share(5,'med'), com=share(5,'high');
+    const allPos = con>0 && art>0 && com>0;
+    rec('D1','REVIEW','construction present; share highest in Contested', allPos && con>art && con>com,
+        `share con ${con.toFixed(2)} > art ${art.toFixed(2)}, com ${com.toFixed(2)}`);
+  }
+
+  // D2 — construction basis stated/labelled (REVIEW)
+  {
+    const ok=['eSinter','ySinter','phiCRef'].every(k=>CONFIG[k].source&&CONFIG[k].status&&/ASSUMPTION|CONTROL/.test(CONFIG[k].status));
+    rec('D2','REVIEW','construction coefficients labelled as assumptions', ok, ok?'e_sinter/Y_sinter/phi_c flagged':'unlabelled');
+  }
+
+  // E2-guard — no "Cannon & Britt" adjacent to "1-30 wt%" (GATE, needs fileText).
+  // Scan only the user-facing content: strip this DOM-free code block first, so the
+  // guard never trips on its own regex source. Terms are assembled from pieces so the
+  // literal trigger string never appears verbatim in this file.
+  {
+    if (typeof fileText === 'string' && fileText.length){
+      const mk='===== MODEL-CORE:', a=fileText.indexOf('/* '+mk+'START ====='+' */'), b=fileText.indexOf('/* '+mk+'END ====='+' */');
+      let scan = (a>=0 && b>a) ? (fileText.slice(0,a)+fileText.slice(b)) : fileText;
+      const name = 'Cannon' + String.fromCharCode(32,38,32) + 'Britt';   // "Cannon & Britt"
+      const rangeRe = '1\\s*[-\\u2013]\\s*30\\s*wt';
+      const re = new RegExp(name+'[\\s\\S]{0,220}'+rangeRe+'|'+rangeRe+'[\\s\\S]{0,220}'+name, 'i');
+      const bad = re.test(scan);
+      rec('E2-guard','GATE','no "Cannon & Britt" cited for the 1-30 wt% range', !bad, bad?'MIS-ATTRIBUTION PRESENT':'clean (user-facing copy)');
+    } else {
+      rec('E2-guard','GATE','no "Cannon & Britt" cited for the 1-30 wt% range', true, 'skipped (no fileText supplied)');
+    }
+  }
+
+  // C3 — the separation strip reads ~107 / 3 / 714 at Sustained (GATE).
+  // These are the φc=0 water capacities the hero strip plots per posture.
+  {
+    const capOf=(ice,f)=>{ const e=envelope(f,'2055'); return model({ice,power:e.P,mass:e.M,fission:e.fission}).cap; };
+    const con=capOf(1,'low'), art=capOf(5,'med'), com=capOf(5,'high');
+    const ok = rel(con,3)<=0.12 && rel(art,107)<=0.05 && rel(com,714)<=0.05
+            && Math.log10(Math.max(con,art,com)/Math.min(con,art,com))>=2.0;
+    rec('C3','GATE','separation strip reads ~107/3/714 at Sustained (φc=0 caps, ≥2 orders)', ok,
+        `con ${con.toFixed(2)} / art ${art.toFixed(1)} / com ${com.toFixed(0)}`);
+  }
+
+  // D3 — the construction readout tracks the LIVE φc (REVIEW).
+  // 0 at φc=0, rises with φc (= φc·Cfull), and water falls by the same split.
+  {
+    const base={ice:5,power:150,mass:1000,fission:true};
+    const c0=model({...base,phi_c:0}), c3=model({...base,phi_c:0.3}), c6=model({...base,phi_c:0.6});
+    const rises = c0.construction===0 && c3.construction>c0.construction && c6.construction>c3.construction;
+    const linear = Math.abs(c3.construction-0.3*c0.Cfull)<1e-6 && Math.abs(c6.construction-0.6*c0.Cfull)<1e-6;
+    const waterFalls = c3.water<c0.water && c6.water<c3.water;
+    rec('D3','REVIEW','construction readout tracks live φc (0 at φc=0, rises; water falls)',
+        rises && linear && waterFalls,
+        `C 0/${c3.construction.toFixed(0)}/${c6.construction.toFixed(0)}  W ${c0.water.toFixed(0)}/${c3.water.toFixed(0)}/${c6.water.toFixed(0)}`);
+  }
+
+  return R;
+}
+/* ===== MODEL-CORE:END ===== */
+
+/* ============================================================
+   NARRATIVES + PRESETS (app-layer, not physics)
+   ============================================================ */
+/* Presets set the ACTIVE scenario (funding + geology + construction split).
+   Phase is a separate GLOBAL axis shared by all three — a preset never changes it. */
+const PRESETS = {
+  artemis:    {label:'Artemis Trajectory',    funding:'med',  ice:5, phi_c:0.05},
+  contested:  {label:'Contested Foundations', funding:'low',  ice:1, phi_c:0.60},
+  commercial: {label:'The Commercial Break',  funding:'high', ice:5, phi_c:0.05}
+};
+const PRESET_OF_FUNDING = {med:'artemis', low:'contested', high:'commercial'};
+const NARRATIVES = {
+  artemis: "Agency-led program of record at Cabeus-grade 5 wt% ice. Funding sets an envelope that fans out only after fission arrives (~2040): 1 kW / 10 t prospecting, 45 kW / 200 t pilot, 150 kW / 1,000 t sustained. Water scales with power; construction is a modest side-stream. Strategic question: which Canadian contribution, deployed in the Pilot window, becomes structurally necessary to Sustained rather than substitutable by a partner?",
+  contested: "Agency-austere posture against marginal 1 wt% ice (100:1 regolith-to-water). Water stays demonstration-scale (~3 t/yr even at Sustained), so regolith construction (sintered pads, berms, tiles) is the primary product here, not water. Strategic question: can Canada's mining, autonomy, and geosensing strengths transfer to a regolith-construction economy and to Mars, rather than being stranded?",
+  commercial: "Private capital arrives early and at scale against rich 5 wt% ice. The envelope jumps two orders by Sustained (1,000 kW / 10,000 t → ~710 t/yr): same geology as Artemis, differentiated by capital, not rock. Strategic question: what presence and IP must Canadian entities hold before the commercial architecture locks in?"
+};
+
+/* Knob display metadata (values live in DETENTS) */
+const KNOBS = {
+  ice:   {label:'Ice grade', unit:'wt%', fmt:v=>v.toFixed(1), cap:'geology'},
+  power: {label:'Power', unit:'kWe', fmt:v=>v>=10?Math.round(v):v, cap:'to envelope'},
+  mass:  {label:'Landed mass', unit:'t', fmt:v=>Math.round(v), cap:'to envelope'},
+  phi_c: {label:'Constr. share', unit:'φc', fmt:v=>v.toFixed(2), cap:'water ↔ build'}
+};
+function knobVal(k){ return DETENTS[k][state[k]]; }
+function snapIdx(key,v){ return nearestIdx(DETENTS[key], v); }
+
+/* ============================================================
+   STATE
+   ============================================================ */
+let state = { ice:snapIdx('ice',5), power:0, mass:0, phi_c:0,
+              funding:'med', phase:'2055', fission:true };
+function currentEnv(){ return envelope(state.funding, state.phase); }
+function ceilIdx(key){ // largest detent index at/below the envelope ceiling
+  const ceil = key==='power' ? currentEnv().P : currentEnv().M;
+  const arr = DETENTS[key]; let idx=0;
+  for (let i=0;i<arr.length;i++){ if (arr[i] <= ceil+1e-9) idx=i; }
+  return idx;
+}
+function snapToEnvelope(fullUtil){
+  const env = currentEnv();
+  state.fission = env.fission;
+  const pc=ceilIdx('power'), mc=ceilIdx('mass');
+  if (fullUtil){ state.power=pc; state.mass=mc; }
+  else { state.power=Math.min(state.power,pc); state.mass=Math.min(state.mass,mc); }
+}
+function applyPreset(p){
+  // Phase is global — a preset changes the active scenario, never the phase.
+  state.funding=p.funding;
+  state.ice=snapIdx('ice',p.ice); state.phi_c=snapIdx('phi_c',p.phi_c);
+  snapToEnvelope(true);
+}
+function matchesPreset(p){
+  // "Active" if funding/geology/split match AND the knobs sit at the envelope
+  // for the CURRENT global phase (so a preset stays selected across phases).
+  const env=envelope(p.funding,state.phase);
+  return state.funding===p.funding
+      && state.ice===snapIdx('ice',p.ice) && state.phi_c===snapIdx('phi_c',p.phi_c)
+      && state.power===snapIdx('power',env.P) && state.mass===snapIdx('mass',env.M)
+      && state.fission===env.fission;
+}
+function activePreset(){ for(const id in PRESETS) if(matchesPreset(PRESETS[id])) return id; return null; }
+
+/* ============================================================
+   POLL SEAM  —  the single, documented entry point where a future
+   live-poll integration would set knob state. NOT wired or tested
+   this cycle by design. To wire later: validate + map poll fields to
+   detent indices here, then call render(). Nothing else calls this.
+   ============================================================ */
+function applyPollInput(_input){ /* intentionally inert: architectural seam only */ }
+
+/* ============================================================
+   BUILD UI
+   ============================================================ */
+const presetsEl=document.getElementById('presets');
+Object.entries(PRESETS).forEach(([id,p])=>{
+  const b=document.createElement('button'); b.className='preset'; b.type='button'; b.textContent=p.label;
+  b.dataset.id=id; b.addEventListener('click',()=>{ applyPreset(p); render(); }); presetsEl.appendChild(b);
+});
+
+const phaseSeg=document.getElementById('phaseSeg');
+const PHASES=[['2030','Prospecting'],['2040','Pilot'],['2055','Sustained']];
+PHASES.forEach(([id,name])=>{
+  const b=document.createElement('button'); b.type='button'; b.dataset.p=id; b.innerHTML=`${name}<br><span style="opacity:.7">${id}</span>`;
+  b.addEventListener('click',()=>{ state.phase=id; snapToEnvelope(true); render(); }); phaseSeg.appendChild(b);
+});
+
+const knobRedraws={};
+function createKnob(key){
+  const spec=KNOBS[key], steps=DETENTS[key].length;
+  const unit=document.createElement('div'); unit.className='knob-unit';
+  const NS='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(NS,'svg'); svg.setAttribute('viewBox','0 0 100 100');
+  svg.classList.add('ksvg'); svg.setAttribute('tabindex','0'); svg.setAttribute('role','slider');
+  svg.setAttribute('aria-label',spec.label);
+  const val=document.createElement('div'); val.className='kval';
+  const lab=document.createElement('div'); lab.className='klabel'; lab.textContent=spec.label;
+  const cap=document.createElement('div'); cap.className='kcap';
+  unit.append(svg,val,lab,cap);
+
+  function redraw(){
+    const idx=state[key]; const capIdx=(key==='power'||key==='mass')?ceilIdx(key):(steps-1);
+    let h='';
+    h+='<circle cx="50" cy="50" r="37" fill="#101a2c" stroke="#28374F" stroke-width="1.5"/>';
+    // persistent drag signifier: up/down chevrons flanking the hub (this dial is an input)
+    h+='<path class="kchev" d="M45 33 L50 28.5 L55 33" fill="none" stroke="#54CBE3" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>';
+    h+='<path class="kchev" d="M45 67 L50 71.5 L55 67" fill="none" stroke="#54CBE3" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/>';
+    for(let i=0;i<steps;i++){
+      const th=(-135+i/(steps-1)*270)*Math.PI/180, s=Math.sin(th), c=Math.cos(th);
+      const on=i<=idx, over=i>capIdx;
+      const col = over ? '#233247' : (on ? '#54CBE3' : '#2b3a52');
+      h+=`<line x1="${(50+s*39).toFixed(1)}" y1="${(50-c*39).toFixed(1)}" x2="${(50+s*45).toFixed(1)}" y2="${(50-c*45).toFixed(1)}" stroke="${col}" stroke-width="${on&&!over?2:1.5}"/>`;
+    }
+    const t=(-135+idx/(steps-1)*270)*Math.PI/180;
+    h+=`<line x1="50" y1="50" x2="${(50+Math.sin(t)*29).toFixed(1)}" y2="${(50-Math.cos(t)*29).toFixed(1)}" stroke="#E6EDF6" stroke-width="3" stroke-linecap="round"/>`;
+    h+='<circle cx="50" cy="50" r="6" fill="#1C2942" stroke="#54CBE3" stroke-width="1.5"/>';
+    svg.innerHTML=h;
+    val.innerHTML=`${spec.fmt(knobVal(key))}<span class="ku"> ${spec.unit}</span>`;
+    cap.textContent = (key==='power'||key==='mass') ? (idx>=capIdx?'at ceiling':'below ceiling') : spec.cap;
+    svg.setAttribute('aria-valuemin','0'); svg.setAttribute('aria-valuemax',String(steps-1));
+    svg.setAttribute('aria-valuenow',String(idx));
+    svg.setAttribute('aria-valuetext',`${spec.fmt(knobVal(key))} ${spec.unit}`);
+  }
+  const maxIdx=()=> (key==='power'||key==='mass') ? ceilIdx(key) : steps-1;
+  function setIdx(ni){ ni=Math.max(0,Math.min(maxIdx(),ni)); if(ni!==state[key]){state[key]=ni; render();} }
+  let sy=0, si=0, drag=false;
+  svg.addEventListener('pointerdown',e=>{drag=true; sy=e.clientY; si=state[key]; svg.setPointerCapture(e.pointerId); e.preventDefault();});
+  svg.addEventListener('pointermove',e=>{ if(!drag)return; setIdx(si+Math.round((sy-e.clientY)/6)); });
+  svg.addEventListener('pointerup',e=>{drag=false; try{svg.releasePointerCapture(e.pointerId);}catch(_){}});
+  svg.addEventListener('wheel',e=>{e.preventDefault(); setIdx(state[key]+(e.deltaY<0?1:-1));},{passive:false});
+  svg.addEventListener('keydown',e=>{ let ni=state[key];
+    if(e.key==='ArrowUp'||e.key==='ArrowRight')ni++; else if(e.key==='ArrowDown'||e.key==='ArrowLeft')ni--;
+    else if(e.key==='Home')ni=0; else if(e.key==='End')ni=maxIdx(); else return;
+    e.preventDefault(); setIdx(ni); });
+  knobRedraws[key]=redraw;
+  return unit;
+}
+
+const consoleEl=document.getElementById('console');
+// Drivers: geology + funding
+const dTier=document.createElement('div'); dTier.className='tier';
+dTier.innerHTML='<div class="tierhead"><span class="lbl k">Drivers</span><span class="d">the world / the funder hand you these</span></div>';
+const dGrid=document.createElement('div'); dGrid.className='knobs-grid';
+dGrid.appendChild(createKnob('ice'));
+const fund=document.createElement('div'); fund.className='funding-wrap';
+fund.innerHTML='<div class="flabel">Funding posture</div>';
+const fseg=document.createElement('div'); fseg.className='seg';
+[['low','Austere'],['med','Agency'],['high','Commercial']].forEach(([id,t])=>{ const b=document.createElement('button'); b.type='button'; b.textContent=t; b.dataset.f=id;
+  b.addEventListener('click',()=>{state.funding=id; snapToEnvelope(true); render();}); fseg.appendChild(b); });
+fund.appendChild(fseg);
+const fsub=document.createElement('div'); fsub.className='fsub'; fsub.id='fundSub'; fund.appendChild(fsub);
+dGrid.appendChild(fund); dTier.appendChild(dGrid); consoleEl.appendChild(dTier);
+// Decisions: power(+fission), mass, construction split
+const aTier=document.createElement('div'); aTier.className='tier';
+aTier.innerHTML='<div class="tierhead"><span class="lbl k">Decisions</span><span class="d">the program chooses these, up to the envelope</span></div>';
+const aGrid=document.createElement('div'); aGrid.className='knobs-grid';
+const pcluster=document.createElement('div'); pcluster.className='power-cluster';
+pcluster.appendChild(createKnob('power'));
+const fbox=document.createElement('div'); fbox.className='fission-box';
+fbox.innerHTML='<span class="flabel">Power source</span>';
+const sw=document.createElement('label'); sw.className='switch';
+sw.innerHTML='<input type="checkbox" id="fission"><span class="track"></span><span class="st" id="fissionSt">Fission</span>';
+fbox.appendChild(sw); pcluster.appendChild(fbox); aGrid.appendChild(pcluster);
+aGrid.appendChild(createKnob('mass'));
+aGrid.appendChild(createKnob('phi_c'));
+aTier.appendChild(aGrid); consoleEl.appendChild(aTier);
+const knobHint=document.createElement('div'); knobHint.className='knobhint';
+knobHint.textContent='Dials are inputs: drag up/down, scroll, or use arrow keys.';
+consoleEl.appendChild(knobHint);
+document.getElementById('fission').addEventListener('change',e=>{ state.fission=e.target.checked; render(); });
+
+// outcome squares shell
+const outsEl=document.getElementById('outs');
+for(let i=0;i<4;i++){ const o=document.createElement('div'); o.className='out'; o.id='out-'+i;
+  o.innerHTML='<div class="swatch"></div><div class="oname"></div><div><span class="ovalue"></span><span class="ounit"></span></div><div class="ocap"></div>';
+  outsEl.appendChild(o); }
+
+function squares(m){
+  const phi=m.phi_c, sharePct=Math.round(phi*100);
+  return [
+    {name:'Water produced', v:m.water, unit:'t/yr', dp:m.water<10?2:0,
+     health:m.feasible?0.9:clamp01(m.cap>0?m.water/m.cap:0)*0.5+0.1,
+     cap:m.regime==='power-limited'?'power-limited (healthy)':'mass-limited', bind:!m.feasible},
+    {name:'Regolith throughput', v:m.regolith, unit:'t/yr', dp:0, health:clamp01(1-m.regolith/6000),
+     cap:`${(100/m.ice).toFixed(0)}:1 regolith-to-water`, bind:false},
+    {name:'Construction', v:m.construction, unit:'t/yr', dp:m.construction<10?1:0, health:0.6,
+     cap:`${sharePct}% of plant · ${phi<0.5?'side-stream':'primary product'}`, bind:false},
+    {name:'Mining plant mass', v:m.mining, unit:'t', dp:m.mining<10?1:0, health:clamp01(m.mining/Math.max(1,m.mass)),
+     cap:`of ${fmtNum(m.mass,0)} t landed · ${fmtNum(m.mPwr,m.mPwr<10?1:0)} t to power`, bind:m.binding==='power-system mass'},
+  ];
+}
+function fmtNum(v,dp){ return v.toLocaleString(undefined,{minimumFractionDigits:dp,maximumFractionDigits:dp}); }
+function hx(h){ const stops=[[229,101,75],[224,168,63],[63,185,132]]; h=clamp01(h);
+  const seg=h<0.5?0:1, t=h<0.5?h/0.5:(h-0.5)/0.5, a=stops[seg], b=stops[seg+1];
+  const c=a.map((v,i)=>Math.round(v+(b[i]-v)*t)); return `rgb(${c[0]},${c[1]},${c[2]})`; }
+
+/* ============================================================
+   RENDER
+   ============================================================ */
+function render(){
+  const env=currentEnv();
+  const m=model({ice:knobVal('ice'), power:knobVal('power'), mass:knobVal('mass'),
+                 fission:state.fission, funding:state.funding, phase:state.phase, phi_c:knobVal('phi_c')});
+  Object.keys(KNOBS).forEach(k=>knobRedraws[k]());
+  document.querySelectorAll('.seg button[data-f]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.f===state.funding)));
+  document.querySelectorAll('.phaseseg button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.p===state.phase)));
+  const fc=document.getElementById('fission'); fc.checked=state.fission;
+  document.getElementById('fissionSt').textContent = state.fission?'Fission':'Solar';
+  const fundName={low:'Austere (S2)',med:'Agency (S1)',high:'Commercial (S3)'}[state.funding];
+  document.getElementById('fundSub').textContent = `${fundName} · envelope ceiling ${env.P} kW / ${fmtNum(env.M,0)} t`;
+
+  // phase / envelope note
+  const phaseName={'2030':'Prospecting','2040':'Pilot','2055':'Sustained'}[state.phase];
+  document.getElementById('envNote').innerHTML =
+    `Envelope: <b>${fundName.split(' ')[0]} · ${phaseName}</b> → ceiling <b>${env.P} kW</b> / <b>${fmtNum(env.M,0)} t</b>, fission ${env.fission?'available':'not yet'}. Using ${Math.round((m.envPowerFrac||0)*100)}% power / ${Math.round((m.envMassFrac||0)*100)}% mass.`;
+
+  const ap=activePreset();
+  document.querySelectorAll('.preset').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.id===ap)));
+
+  const scene=document.getElementById('scene');
+  scene.classList.toggle('ok',m.feasible); scene.classList.toggle('no',!m.feasible);
+  const named = ap || PRESET_OF_FUNDING[state.funding];
+  document.getElementById('sceneName').textContent = ap?PRESETS[ap].label:(PRESETS[named]?PRESETS[named].label+' (custom)':'Custom configuration');
+  const pill=document.getElementById('scenePill'); pill.textContent=m.feasible?'Power-limited':'Mass-limited'; pill.className='pill '+(m.feasible?'ok':'no');
+  document.getElementById('sceneNamed').textContent = ap?'named scenario':'exploring';
+  document.getElementById('sceneBody').textContent = NARRATIVES[named] || '';
+  document.getElementById('sceneNeed').innerHTML =
+    `At ${KNOBS.ice.fmt(m.ice)} wt% and ${Math.round(m.power)} kWe (${state.fission?'fission':'solar'}): water <b>${m.water.toFixed(m.water<10?2:0)} t/yr</b> · binding constraint <b>${m.binding}</b> · construction <b>${m.construction.toFixed(m.construction<10?1:0)} t/yr</b> at φc ${m.phi_c.toFixed(2)}.`;
+
+  // mass bar
+  const total=Math.max(m.mass,1e-9), pFrac=clamp01(m.mPwr/total), mFrac=clamp01(m.mining/total);
+  const segP=document.getElementById('segP'), segM=document.getElementById('segM');
+  if(m.mPwr>=total){ segP.style.width='100%'; segP.className='seg-over'; segM.style.width='0%'; }
+  else { segP.className='seg-p'; segP.style.width=(pFrac*100)+'%'; segM.style.width=(mFrac*100)+'%'; }
+  document.getElementById('keyP').textContent=`power system ${m.mPwr.toFixed(m.mPwr<10?1:0)} t`;
+  document.getElementById('keyM').textContent=`mining plant ${Math.max(0,m.mining).toFixed(m.mining<10?1:0)} t`;
+
+  squares(m).forEach((sq,i)=>{ const el=document.getElementById('out-'+i), col=hx(sq.health);
+    el.querySelector('.swatch').style.background=col;
+    el.querySelector('.oname').textContent=sq.name;
+    el.querySelector('.ovalue').textContent=fmtNum(sq.v,sq.dp); el.querySelector('.ovalue').style.color=col;
+    el.querySelector('.ounit').textContent=' '+sq.unit;
+    const cap=el.querySelector('.ocap'); cap.textContent=sq.bind?'binding constraint':sq.cap; cap.className='ocap'+(sq.bind?' bind':'');
+  });
+
+  updateStrip(m);
+  drawField(m);
+}
+
+/* ---- operating-regime field: X=landed mass, Y=power --------------- */
+const cv=document.getElementById('field'), ctx=cv.getContext('2d');
+function drawField(m){
+  const W=cv.width, H=cv.height, padL=52, padB=30, padT=12, padR=12;
+  ctx.clearRect(0,0,W,H);
+  const mV=DETENTS.mass, pV=DETENTS.power;
+  const mMin=mV[0], mMax=mV[mV.length-1], pMin=pV[0], pMax=pV[pV.length-1];
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const cols=60, rows=42, cw=plotW/cols, ch=plotH/rows;
+  const ice=m.ice, fission=state.fission;
+  // reference water for brightness scaling = power-limited water at top-right
+  const wRef=Math.max(1e-6, model({ice,power:pMax,mass:mMax,fission:true}).cap);
+  for(let c=0;c<cols;c++) for(let r=0;r<rows;r++){
+    const fx=c/(cols-1), fy=r/(rows-1);
+    const mass=mMin*Math.pow(mMax/mMin,fx);
+    const power=pMin*Math.pow(pMax/pMin,1-fy);
+    const mm=model({ice,power,mass,fission});
+    let col;
+    if(mm.feasible){ const b=clamp01(0.25+0.75*Math.pow(mm.cap/wRef,0.35));
+      col=`rgba(${Math.round(30+20*b)},${Math.round(120+65*b)},${Math.round(90+42*b)},${0.55+0.4*b})`; }
+    else { const hh=clamp01(mm.Wthr/Math.max(mm.Wpower,1e-9));
+      col=`rgba(${Math.round(224-30*hh)},${Math.round(120+40*hh)},${Math.round(63+20*hh)},0.80)`; }
+    ctx.fillStyle=col; ctx.fillRect(padL+fx*plotW, padT+fy*plotH, cw+1, ch+1);
+  }
+  // axes
+  ctx.font='12px ui-monospace,monospace'; ctx.fillStyle='#A2B2C8';
+  ctx.textAlign='center'; ctx.fillText('LANDED MASS  →', padL+plotW/2, H-6);
+  [mMin, mV[Math.floor(mV.length/2)], mMax].forEach(v=>{ const fx=Math.log(v/mMin)/Math.log(mMax/mMin);
+    ctx.fillText(fmtNum(v,0)+' t', padL+fx*plotW, H-padB+16); });
+  ctx.save(); ctx.translate(14,padT+plotH/2); ctx.rotate(-Math.PI/2); ctx.textAlign='center'; ctx.fillText('POWER kWe  →',0,0); ctx.restore();
+  ctx.textAlign='right';
+  [pMin, pV[Math.floor(pV.length/2)], pMax].forEach(v=>{ const fy=1-Math.log(v/pMin)/Math.log(pMax/pMin);
+    ctx.fillText(Math.round(v), padL-6, padT+fy*plotH+3); });
+  // current point
+  const cx=padL+Math.log(m.mass/mMin)/Math.log(mMax/mMin)*plotW;
+  const cy=padT+(1-Math.log(m.power/pMin)/Math.log(pMax/pMin))*plotH;
+  ctx.beginPath(); ctx.arc(cx,cy,7,0,7); ctx.fillStyle='#fff'; ctx.fill();
+  ctx.lineWidth=2; ctx.strokeStyle='#0B1220'; ctx.stroke();
+  document.getElementById('fieldTag').textContent = (state.fission?'fission':'solar')+' · '+KNOBS.ice.fmt(m.ice)+' wt%';
+}
+window.addEventListener('resize',()=>render());
+
+/* ============================================================
+   SEPARATION STRIP (the hero) — three funding postures on one
+   shared log axis, plotted at the CURRENT global phase. The active
+   scenario reflects the live knobs; the other two are the canonical
+   posture at this phase. All markers are the calibrated water
+   capacity (φc = 0), so Contested stays ~3 even when its live φc
+   defaults higher. This is the CSA "see the separation" element.
+   ============================================================ */
+const SCEN = {
+  contested:  {name:'Contested',  funding:'low',  ice:1, tier:22},
+  artemis:    {name:'Artemis',    funding:'med',  ice:5, tier:50},
+  commercial: {name:'Commercial', funding:'high', ice:5, tier:78}
+};
+const SEP_MIN=0.05, SEP_MAX=2000;
+const SEP_L0=Math.log10(SEP_MIN), SEP_SPAN=Math.log10(SEP_MAX)-SEP_L0;
+// map into [4%,96%] so the large active-value label keeps margin at the rails
+function sepX(v){ const lv=Math.log10(Math.max(SEP_MIN,Math.min(SEP_MAX,v))); return 4 + (lv-SEP_L0)/SEP_SPAN*92; }
+function buildStrip(){
+  const plot=document.getElementById('sepPlot');
+  let h='<div class="sepbase"></div>';
+  [0.1,1,10,100,1000].forEach(t=>{ const x=sepX(t);
+    h+=`<div class="sepgrid" style="left:${x}%"></div>`;
+    h+=`<div class="sepgridlab" style="left:${x}%">${t<1?'0.1':t}</div>`; });
+  ['contested','artemis','commercial'].forEach(id=>{
+    h+=`<div class="sepmark" id="mk-${id}"><span class="mkdot"></span>`+
+       `<span class="mkstem" style="height:${SCEN[id].tier}px"></span>`+
+       `<span class="mkname">${SCEN[id].name}</span><span class="mkval"></span></div>`; });
+  plot.innerHTML=h;
+}
+function updateStrip(m){
+  const activeId=PRESET_OF_FUNDING[state.funding];
+  const phaseName={'2030':'Prospecting','2040':'Pilot','2055':'Sustained'}[state.phase];
+  document.getElementById('sepTitle').innerHTML=`Water production at <b>${phaseName}</b>: three funding postures`;
+  ['contested','artemis','commercial'].forEach(id=>{
+    const s=SCEN[id];
+    let cap;
+    if(id===activeId){ cap=m.cap; }
+    else { const e=envelope(s.funding,state.phase); cap=model({ice:s.ice,power:e.P,mass:e.M,fission:e.fission}).cap; }
+    const el=document.getElementById('mk-'+id);
+    el.className='sepmark '+(id===activeId?'act':'ctx');
+    el.style.left=sepX(cap)+'%';
+    const dp=cap<1?2:(cap<10?1:0);
+    el.querySelector('.mkval').innerHTML=`${fmtNum(cap,dp)}<span class="mkunit"> t/yr</span>`;
+  });
+  document.getElementById('sepCap').innerHTML=
+    `Calibrated water capacity per posture (φc = 0 basis) at <b>${phaseName}</b>. Log scale; markers slide as ice, funding, and phase change.`;
+}
+
+/* ============================================================
+   REFERENCE PAGE (equations + sources)
+   ============================================================ */
+function badge(status){ const c=/SOURCED|CONSTANT/.test(status)?'src':(/CONTROL/.test(status)?'ctl':'asm'); return `<span class="badge ${c}">${status}</span>`; }
+function buildRefPage(){
+  const eqs=[
+    ['E1',"Ẇ = 0.142 · ice · P",'power-limited water rate (t/yr); ice in wt%, P in kWe'],
+    ["E1'","Ẇ = P·H·duty / e(ice), e(ice)=37,000/ice",'identical energy form (the app uses this)'],
+    ['E2',"ρ(ice) = 100 / ice",'regolith-to-water ratio (t/t)'],
+    ['E3',"R = Ẇ · ρ",'regolith throughput for water (t/yr)'],
+    ['E4',"M_power = fission ? 0.15·P : 2.5·P",'power-system landed mass (t)'],
+    ['E5',"M_mining = max(0, M − M_power)",'mass available to the plant (t)'],
+    ['E6',"R_cap = 4 · M_mining",'plant processing capacity (t regolith/yr)'],
+    ['E7',"Ẇ = (1−φc)·min(Ẇ_power, R_cap/ρ)",'actual water; min of power- and throughput-limits'],
+    ['E8',"C = φc·min(P·H·duty/e_sinter, 0.85·R_cap)",'construction (sintered) product (t/yr)'],
+    ['E9',"binding = (Ẇ_power<Ẇ_thr) ? 'power' : (M_mining≤0 ? 'power-system mass' : 'landed mass')",'which limit is active']
+  ];
+  const coefRows=Object.entries(CONFIG).map(([k,v])=>
+    `<tr><td class="mono">${k}</td><td class="mono">${v.value}</td><td class="mono">${v.unit}</td><td>${v.source}</td><td>${badge(v.status)}</td></tr>`).join('');
+  const eqRows=eqs.map(([n,e,d])=>`<tr><td class="mono">${n}</td><td class="eq">${e}</td><td>${d}</td></tr>`).join('');
+  const el=document.getElementById('refpage');
+  el.innerHTML=`
+    <h2>Equations &amp; sources</h2>
+    <p>Every number in this tool is here with a value, a unit, and a source, or an explicit assumption flag. The water model is the proposal's own two-axis structure: <b>ice sets kWh per tonne, funding sets the power/mass envelope</b>, recovered to one coefficient (0.142) from Table&nbsp;4. It reproduces the proposal truth set (Artemis 1/32/107, Contested &lt;1/1/3, Commercial 1/86/714 t/yr) within a few percent.</p>
+    <h3>Equations</h3>
+    <div class="refscroll"><table class="reftbl"><thead><tr><th>#</th><th>Equation</th><th>Meaning</th></tr></thead><tbody>${eqRows}</tbody></table></div>
+    <h3>Coefficients</h3>
+    <p class="badgelegend"><span class="lg">${badge('SOURCED')} traces to the proposal or a public source</span><span class="lg">${badge('ASSUMPTION')} engineering estimate, flagged</span><span class="lg">${badge('CONTROL')} display setting, not physics</span></p>
+    <div class="refscroll"><table class="reftbl"><thead><tr><th>Symbol</th><th>Value</th><th>Unit</th><th>Source / basis</th><th>Status</th></tr></thead><tbody>${coefRows}</tbody></table></div>
+    <h3>Anchors the model reproduces</h3>
+    <ul style="font-size:13px;color:#c9d5e6;max-width:88ch">
+      <li>Pilot: 1 kW @ 5 wt% → 0.71 t/yr ≈ the proposal's 700 kg (Table&nbsp;4).</li>
+      <li>100 t/yr @ 5 wt% ↔ 141 kW (Table&nbsp;4: 125–156 kW); @ 1 wt% ↔ 704 kW (Table&nbsp;4: 625–780 kW).</li>
+      <li>Sowers &amp; Dreyer benchmark: 2,250 kW @ 5 wt% → ~1,598 t/yr ≈ their 1,600 t (proposal §3.3.5).</li>
+      <li>Energy sanity: 26.7 MJ/kg water @ 5 wt% end-to-end vs 10–20 MJ/kg thermodynamic (Sowers &amp; Dreyer) → a 1.3–2.7× system overhead.</li>
+    </ul>
+    <h3>Ice concentration range: provenance</h3>
+    <p>The ice knob spans <b>1–30 wt%</b> as the study's adopted <i>modeling envelope</i>, not a measured distribution. <b>1 wt%</b> = lower extraction-viability threshold; <b>30 wt%</b> ≈ regolith pore-filling limit. The only ground-truth anchor is the <b>LCROSS ~5.6 wt%</b> measurement at Cabeus (Colaprete et&nbsp;al. 2010): one site, one depth. No measurement establishes the distribution across this range; VIPER (2027) will add one more point. The 1–30 wt% bounds are sourced to the proposal's own Production Architecture Basis and the LCROSS anchor. They are <b>not</b> a bulk-concentration distribution and are not attributed to emplacement/stratigraphy modeling papers.</p>
+    <h3>Honest assumptions (a CSA systems engineer will push here)</h3>
+    <ul style="font-size:13px;color:#c9d5e6;max-width:88ch">
+      <li><b>k_exc = 4 t regolith/yr per t plant</b>: the plant throughput coefficient. <b>Not sourceable from the proposal.</b> Calibrated so scenario points are power-limited and fission-off shows a mass penalty. This is the model's one genuine hypothesis.</li>
+      <li><b>f_sol = 2.5 t/kWe</b>: PSR continuous solar is battery-dominated (no direct sunlight). Anchored to night-survival battery mass, not measured.</li>
+      <li><b>duty = 0.60</b>: jointly pinned with E1 to reproduce Table&nbsp;4. Changing one without the other breaks the calibration.</li>
+      <li><b>captureEff = 1.0</b>: the proposal's regolith ratios (ρ = 100/ice) imply ~100% ice liberation. Real thermal capture is ~0.8–0.9; 1.0 is adopted to match the proposal, so throughput here is a best case.</li>
+      <li><b>e_sinter = 3 MJ/kg, Y_sinter = 0.85, φc defaults</b>: the proposal foregrounds construction qualitatively but gives no tonnage. The <i>structure</i> is sourced; the <i>magnitudes</i> are literature-anchored assumptions. "Lower energy" for sintering is relative to O₂/metal reduction, not absolute; construction still competes with water for power.</li>
+    </ul>`;
+}
+
+/* ============================================================
+   DEV SELF-CHECK PANEL (hidden by default)
+   ============================================================ */
+function renderDevPanel(){
+  const el=document.getElementById('devpanel');
+  const res=runTests(document.documentElement.outerHTML);
+  const gate=res.filter(r=>r.tier==='GATE'), rev=res.filter(r=>r.tier==='REVIEW');
+  const gPass=gate.filter(r=>r.pass).length, rPass=rev.filter(r=>r.pass).length;
+  const rows=res.map(r=>`<tr><td>${r.id}</td><td>${r.tier}</td><td class="${r.pass?'p':'f'}">${r.pass?'PASS':'FAIL'}</td><td>${r.name}</td><td>${r.detail}</td></tr>`).join('');
+  el.innerHTML=`<h2>Self-check: model vs the proposal</h2>
+    <div class="devsum">GATE ${gPass}/${gate.length} · REVIEW ${rPass}/${rev.length}. The app checks its own physics against the proposal truth set.</div>
+    <div class="refscroll"><table class="devtbl"><thead><tr><th>ID</th><th>Tier</th><th>Result</th><th>Test</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+  el.hidden=false;
+}
+
+/* toggles */
+const refpage=document.getElementById('refpage'), refBtn=document.getElementById('refToggle');
+function toggleRef(force){ const show = force!==undefined?force:refpage.hidden; refpage.hidden=!show; refBtn.setAttribute('aria-expanded',String(show)); if(show){ refpage.scrollIntoView({behavior:'smooth',block:'start'}); } }
+refBtn.addEventListener('click',()=>toggleRef());
+document.getElementById('refLink').addEventListener('click',()=>toggleRef(true));
+document.getElementById('devLink').addEventListener('click',()=>{ renderDevPanel(); document.getElementById('devpanel').scrollIntoView({behavior:'smooth',block:'start'}); });
+
+buildRefPage();
+buildStrip();
+applyPreset(PRESETS.artemis);   // active scenario; global phase stays at Sustained (cold-open on the high-separation view)
+render();
+// dev panel auto-open via URL param
+const q=location.search;
+if(/[?&](test|selfcheck)\b/.test(q) || /[?&](test|selfcheck)=/.test(q)) renderDevPanel();
+</script>
+</body>
+</html>
