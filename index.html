@@ -190,6 +190,33 @@
   .devtbl .p{color:var(--good)} .devtbl .f{color:var(--crit); font-weight:700}
   .devsum{font-family:var(--mono); font-size:13px; margin:10px 0}
 
+  /* state-briefing blurb panel */
+  .blurbpanel{padding:16px 18px}
+  .blurbhead{display:flex; align-items:baseline; gap:10px; margin-bottom:8px}
+  .blurbhead .bt{font-size:14px; font-weight:600; color:var(--text)}
+  .blurbhead .bk{font-family:var(--mono); font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--muted)}
+  .blurbbody{display:flex; flex-direction:column; gap:9px}
+  .blurbtext{margin:0; font-size:13.5px; line-height:1.62; color:#d3dcea; max-width:82ch}
+  .blurbtext:empty{display:none}
+  .blurbtext .staleflag{color:var(--warn); font-weight:600}
+  .claimwrap{margin-top:12px; padding-top:10px; border-top:1px solid var(--line)}
+  .claimwrap .clab{font-family:var(--mono); font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin-bottom:7px}
+  .claimchips{display:flex; flex-wrap:wrap; gap:6px}
+  .chip{font-family:var(--mono); font-size:11px; color:var(--ice); background:var(--panel2);
+    border:1px solid var(--line); border-radius:6px; padding:3px 8px; cursor:pointer; transition:.13s}
+  .chip:hover{border-color:var(--ice)}
+  .chip:focus-visible{outline:2px solid var(--ice); outline-offset:2px}
+  .chip[aria-expanded="true"]{background:var(--ice); color:#06131c; border-color:var(--ice); font-weight:600}
+  .chip.pend{color:var(--warn); border-color:color-mix(in srgb,var(--warn) 45%,transparent)}
+  .chip.pend[aria-expanded="true"]{background:var(--warn); color:#06131c}
+  .claimdetail{margin-top:10px; font-size:12.5px; color:#c9d5e6; line-height:1.55}
+  .claimdetail[hidden]{display:none}
+  .claimdetail .cid{font-family:var(--mono); color:var(--ice); font-weight:600}
+  .claimdetail .cstat{font-family:var(--mono); font-size:10.5px; padding:1px 7px; border-radius:99px; border:1px solid; margin-left:6px; white-space:nowrap}
+  .claimdetail .cstat.ok{color:var(--good); border-color:color-mix(in srgb,var(--good) 55%,transparent)}
+  .claimdetail .cstat.pend{color:var(--warn); border-color:color-mix(in srgb,var(--warn) 55%,transparent)}
+  .claimdetail .csrc{margin-top:5px; color:#c9d5e6}
+
   footer{margin-top:22px; color:var(--muted); font-size:12px; max-width:88ch}
   footer code{font-family:var(--mono); color:#a9bad6}
   footer a{color:var(--ice); cursor:pointer}
@@ -245,6 +272,8 @@
 
       <div class="outs" id="outs"></div>
 
+      <div class="card blurbpanel" id="blurbPanel" aria-live="polite"></div>
+
       <div class="lower">
         <div class="card fieldcard">
           <div class="fieldhead">
@@ -281,8 +310,8 @@
    MODEL-CORE:START
    DOM-free physics. No reads from document / state / UI.
    Shared verbatim by (a) the app, (b) the in-page self-check,
-   and (c) the Node sidecar cr_scratch/step3p8_tests.mjs, which
-   extracts everything between the START/END markers and evals it.
+   and (c) the Node test sidecar, which extracts everything
+   between the START/END markers and evals it.
    ============================================================ */
 /* ===== MODEL-CORE:START ===== */
 const CONFIG = {
@@ -612,6 +641,478 @@ function runTests(fileText){
 /* ===== MODEL-CORE:END ===== */
 
 /* ============================================================
+   BLURB-CORE:START
+   DOM-free state-briefing layer. No reads from document / state
+   globals / UI. composeBlurb(state, modelOut) is pure: it takes
+   the two inputs explicitly and returns a structured object. The
+   Node sidecar extracts this block alongside MODEL-CORE and runs
+   runBlurbTests() headless (BL1-BL9). BL10 is the DOM panel check.
+   Numbers in fragment TEXT are {tokens} bound to model() fields at
+   compose time, never hard-coded settled values. Fixed constants
+   that are sourced coefficients (0.15 t/kWe, 0.33 kWh/kg, etc.) are
+   labelled DESIGN / assumption in place, per the evidence ledger.
+   ============================================================ */
+/* ===== BLURB-CORE:START ===== */
+
+/* CLAIMS: claim ID -> {source, status}. Sources are condensed from
+   the Evidence Ledger (C-block titles + load-bearing values); status
+   is the ledger's verification tag. Inline provenance reads from here. */
+const CLAIMS = {
+  C01:{source:'Water installed-energy constant, about 12,300 kWh per tonne water at 5 wt%, written two ways (kP=0.142 and the /7 divisor). A mature-plant DESIGN target, 2 to 6 times better than the only integrated demonstration (Kleinhenz and Paz 2020; Kornuta 2019; LUWEX 2026).', status:'VERIFIED'},
+  C02:{source:'Ice capture efficiency: the app 100 percent is an optimistic bound; the only integrated demonstration recovered 54 to 73 percent (LUWEX 2026); Wang 2025 collected 30 to 40 percent.', status:'VERIFIED'},
+  C03:{source:'Water extraction specific energy about 7.4 kWh per kg at 5 wt%, within a few percent of the held mine-site design point of 7.9 kWh per kg (Kleinhenz and Paz 2020).', status:'VERIFIED'},
+  C04:{source:'Fission power-system specific mass about 6.5 to 6.7 W per kg, a DESIGN and REQUIREMENT figure (2025 Fission Surface Power directive, at least 100 kWe within a 15 t allocation; Colozza 2020). KRUSTY ground-tested the physics at about 1 kWe electric. Not flight hardware.', status:'VERIFIED'},
+  C05:{source:'Continuous solar plus storage specific mass is siting-dependent: about 0.4 W per kg for permanently shadowed night survival versus about 2 to 7 W per kg on an illuminated ridge (Colozza 2020; Pappa 2021; Glaser 2014).', status:'VERIFIED'},
+  C06:{source:'Plant throughput kExc = 4 t regolith per year per t plant is a disclosed model construct. No primary reports it; every bound says it is conservative by roughly one to one and a half orders (Linne 2020 implies about 69).', status:'VERIFIED (disclosed construct)'},
+  C07:{source:'Mass accounting books all non-power mass as productive plant. The power-share fraction of complex mass is not found in a held source.', status:'UNVERIFIED-pending'},
+  C08:{source:'Construction sinter specific energy: sourced DESIGN value about 0.33 kWh per kg (Metzger and Autry 2023); the app estimate is about 0.83; the demonstrated bench value, reported elsewhere as about 19 to 27 kWh per kg, is not in any held source.', status:'UNVERIFIED-pending'},
+  C09:{source:'Sinter yield about 0.85 t product per t feed, near-lossless in-situ densification (Metzger and Autry 2023). The 15 percent loss is a conservative handling allowance.', status:'VERIFIED'},
+  C10:{source:'Bilinear water law: output proportional to power times grade, specific energy proportional to 1 over grade. The roughly fivefold energy rise from 5 wt% to 1 wt% is measured, not assumed (Wang 2025).', status:'VERIFIED'},
+  C11:{source:'S1 Prospecting envelope 1 kW / 10 t: branch-year cell; power below directive scope, landed mass is scenario premise.', status:'VERIFIED (premise-tagged)'},
+  C12:{source:'S1 Pilot envelope, app 45 kW versus workbook 100 kW / 200 t. Power side sourced to the Fission Surface Power directive minimum of 100 kWe (2025-08-04); the app 45 kW is the pre-directive artifact. Stale-anchor flag.', status:'VERIFIED (premise-tagged; stale anchor)'},
+  C13:{source:'S1 Sustained envelope 150 kW / 1,000 t: power at the low end of the workbook 150 to 220 range; landed mass is premise.', status:'VERIFIED (premise-tagged)'},
+  C14:{source:'S2 Prospecting envelope 1 kW / 10 t: shared 2030 branch-year cell; mass premise.', status:'VERIFIED (premise-tagged)'},
+  C15:{source:'S2 Pilot envelope 10 kW / 75 t: the whole Contested Foundations power rail is scenario premise.', status:'VERIFIED (premise-tagged)'},
+  C16:{source:'S2 Sustained envelope 20 kW / 150 t: scenario premise.', status:'VERIFIED (premise-tagged)'},
+  C17:{source:'S3 Prospecting envelope 1 kW / 10 t: shared 2030 branch-year cell; mass premise.', status:'VERIFIED (premise-tagged)'},
+  C18:{source:'S3 Pilot envelope 120 kW / 1,000 t: power side contextually supported by the directive ISRU-power priority; the specific 120 kW is design or premise.', status:'VERIFIED (premise-tagged)'},
+  C19:{source:'S3 Sustained envelope 1,000 kW (alternate 3 to 6 MW) / 10,000 t: power cross-links to the industrial anchor (Kornuta 2019); design. Mass premise.', status:'VERIFIED (premise-tagged)'},
+  C20:{source:'S1-2030 water cell about 0.71 t/yr, derived = power times grade / 7 from C01.', status:'VERIFIED (derived)'},
+  C21:{source:'S1-2040 water cell: app 45 x 5 / 7 = about 32 t/yr versus workbook 100 x 5 / 7 = about 70 t/yr. Contaminated by the C12 stale power anchor; neither pair is settled.', status:'VERIFIED (derived; stale anchor)'},
+  C22:{source:'S1-2055 water cell about 107 t/yr, derived from C01.', status:'VERIFIED (derived)'},
+  C23:{source:'S2-2030 water cell about 0.14 t/yr, derived from C01 at 1 wt%.', status:'VERIFIED (derived)'},
+  C24:{source:'S2-2040 water cell about 1.4 t/yr, derived from C01 at 1 wt%.', status:'VERIFIED (derived)'},
+  C25:{source:'S2-2055 water cell about 2.9 t/yr, derived from C01 at 1 wt%.', status:'VERIFIED (derived)'},
+  C26:{source:'S3-2030 water cell about 0.71 t/yr, derived from C01.', status:'VERIFIED (derived)'},
+  C27:{source:'S3-2040 water cell about 86 t/yr, derived from C01.', status:'VERIFIED (derived)'},
+  C28:{source:'S3-2055 water cell about 714 t/yr, derived from C01.', status:'VERIFIED (derived)'},
+  C29:{source:'Power-system mass is modeled linear in power with zero fixed base; fission versus solar is a hard binary. The zero-intercept understates small-system mass (Colozza 2020 Table 22).', status:'VERIFIED (premise)'},
+  C30:{source:'Plant output is the minimum of a power limit and a throughput limit (Liebig binding). The app backbone; the workbook carries no throughput cap.', status:'VERIFIED (premise)'},
+  C31:{source:'Water and construction share power and plant via a single linear split phi_c with no switching cost. Frictionless in the model, which is optimistic for a real dual-product plant.', status:'VERIFIED (premise)'},
+  C32:{source:'Three-regime taxonomy: power, landed mass, and power-system mass. A teaching partition, not an exhaustive physical law.', status:'VERIFIED (premise)'},
+  C33:{source:'Reference construction allocation phiCRef = 0.75 drives only the construction-potential readout; it is a display control, not a scenario default.', status:'VERIFIED (premise)'},
+  C34:{source:'Per-scenario default construction share 0.05 / 0.60 / 0.05 (Artemis / Contested Foundations / Commercial). The 0.60 default carries the water-to-construction product flip and is a scenario stance, not a sourced fact.', status:'VERIFIED (premise / scenario judgment)'},
+  C41:{source:'Lunar water is polar: patchy, low-abundance, buried ice in permanently shadowed cold traps. The 30 wt% ceiling is an intimate-mix maximum in isolated pixels (Li 2018), not a mineable seam.', status:'VERIFIED'},
+  C44:{source:'Storage is the deciding undemonstrated variable: battery about 200 Wh per kg versus regenerative fuel cell about 456 to 830 Wh per kg; storage is 75 to 95 percent of a continuous solar system mass (Colozza 2020).', status:'VERIFIED'},
+  C45:{source:'Persistent-light terrain is scarce, localized ridge peaks, capping continuous solar near about 6 MW at the sites above 90 percent illumination (Glaser 2014; Speyerer and Robinson 2013).', status:'VERIFIED'},
+  C52:{source:'The 2030 branch year is identical across all three scenarios (about 1 kW / 10 t / about 1 t/yr water). A modeling convention, not an independently sourced fact.', status:'VERIFIED'},
+  C53:{source:'Ice-grade evidence standard: one in-situ point value (LCROSS 5.6 plus or minus 2.9 wt%, Colaprete 2010), area-averages about 0.5 to 1.5 wt%, and no permanently shadowed region has ever been drilled.', status:'VERIFIED'},
+  C57:{source:'Water industrial anchor: 2.8 MW for 2,450 t/yr water, about 10 kWh per kg (Kornuta 2019). DESIGN, with value density aspirational and no signed market.', status:'VERIFIED'},
+  BC1:{source:'Ice-grade break condition: the chosen grade sits inside a wide, un-drilled distribution bounded below by an about 4 wt% thermal-mining floor (Sowers and Dreyer 2019). The 1 wt% Contested rail already sits below the floor.', status:'VERIFIED'}
+};
+
+/* The pending set that must never render a bare settled number; a blurb
+   touching any of these carries a plain-language hedge instead. */
+const BLURB_PENDING = ['C06','C07','C08','C36','C40','C50','C51','C54'];
+
+/* number formatters (display only; live.value carries the raw model number) */
+function _b0(v){ return Math.round(v).toLocaleString('en-US'); }
+function _b1(v){ return v.toFixed(1); }
+function _bw(v){ return v<10 ? v.toFixed(2) : (v<100 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US')); }
+function _bc(v){ return v<10 ? v.toFixed(1) : Math.round(v).toLocaleString('en-US'); }
+
+/* Token registry: each {token} maps to a model() field, a formatter, a
+   claim tag, and a flagged rule. subst() records a live entry per token. */
+const BLURB_TOKENS = {
+  power:        (m,c)=>({str:_b0(m.power),        live:{field:'power', value:m.power, claim:c.envClaim,   flagged:false}}),
+  mass:         (m,c)=>({str:_b0(m.mass),         live:{field:'mass',  value:m.mass,  claim:c.envClaim,   flagged:false}}),
+  water:        (m,c)=>({str:_bw(m.water),        live:{field:'water', value:m.water, claim:c.waterClaim, flagged:false}}),
+  rho:          (m)  =>({str:_b0(m.rho),          live:{field:'rho',   value:m.rho,   claim:'C41',         flagged:false}}),
+  ice:          (m)  =>({str:_b1(m.ice),          live:{field:'ice',   value:m.ice,   claim:'C53',         flagged:false}}),
+  construction: (m)  =>({str:_bc(m.construction), live:{field:'construction', value:m.construction, claim:'C08', flagged:true}})
+};
+function subst(tpl, m, ctx){
+  return tpl.replace(/\{(\w+)\}/g, (whole, tok)=>{
+    const fn = BLURB_TOKENS[tok];
+    if(!fn) return whole;
+    const e = fn(m, ctx);
+    if(ctx && ctx.live && e.live) ctx.live.push(e.live);
+    return e.str;
+  });
+}
+
+/* ---- BLURB data: 9 base blurbs + 11 fragments (3 ice / 2 fission /
+   3 phi_c / 3 regime). Each carries token text, its claim-ID list, and
+   its pending / DESIGN-vs-DEMONSTRATED disposition. ------------------- */
+const BLURB = {
+  base: {
+    'BASE-LOW-2030':{key:'BASE-LOW-2030', envClaim:'C14', waterClaim:'C23',
+      text:'Contested Foundations at the Prospecting phase. The program fields about {power} kW and {mass} t of landed mass here, on solar power with fission not yet available. Against marginal 1 wt% ice, roughly a {rho} to 1 regolith-to-water ratio, water reads about {water} t/yr, about a factor of five under the 5 wt% branch. The 2030 branch year is shared across all three scenarios; only the geology differs.',
+      claims:['C14','C23','C52','C41','C53','BC1','C04','C05']},
+    'BASE-LOW-2040':{key:'BASE-LOW-2040', envClaim:'C15', waterClaim:'C24',
+      text:'Contested Foundations at the Pilot phase. About {power} kW and {mass} t landed, still on solar power. Water reads about {water} t/yr at 1 wt%, so regolith construction, not water, is the product story here. Which siting the solar number assumes is load bearing.',
+      claims:['C15','C24','C41','C53','BC1','C05']},
+    'BASE-LOW-2055':{key:'BASE-LOW-2055', envClaim:'C16', waterClaim:'C25',
+      text:'Contested Foundations at the Sustained phase, with fission available. About {power} kW and {mass} t landed; water capacity is about {water} t/yr at 1 wt%. This is the highest-stakes state in the tool: the scenario default construction share of 0.60 flips the headline product from water to sintered construction. Any construction tonnage rests on a DESIGN sinter-energy basis with the demonstrated bench value pending, so treat it as design basis, never a firm number.',
+      claims:['C16','C25','C34','C31','C08','C09','C41','C53','BC1']},
+    'BASE-MED-2030':{key:'BASE-MED-2030', envClaim:'C11', waterClaim:'C20',
+      text:'Artemis Trajectory at the Prospecting phase. About {power} kW and {mass} t landed, on solar power. Water reads about {water} t/yr at Cabeus-grade 5 wt%, matching the workbook roughly 700 kg pilot point. The 5 wt% pick is the single in-situ point value, not a measured distribution. The 2030 branch year is common to all three scenarios.',
+      claims:['C11','C20','C52','C41','C53']},
+    'BASE-MED-2040':{key:'BASE-MED-2040', envClaim:'C12', waterClaim:'C21', stale:true,
+      text:'Artemis Trajectory at the Pilot phase, on fission power. As the app currently runs this cell it fields about {power} kW and {mass} t landed, and water reads about {water} t/yr. This one cell carries a known stale power anchor and is shown as a dual reading.',
+      claims:['C12','C21','C04']},
+    'BASE-MED-2055':{key:'BASE-MED-2055', envClaim:'C13', waterClaim:'C22',
+      text:'Artemis Trajectory at the Sustained phase, on fission power. About {power} kW and {mass} t landed; water reads about {water} t/yr at 5 wt%. Water scales with power and the state stays power limited.',
+      claims:['C13','C22','C04']},
+    'BASE-HIGH-2030':{key:'BASE-HIGH-2030', envClaim:'C17', waterClaim:'C26',
+      text:'The Commercial Break at the Prospecting phase. About {power} kW and {mass} t landed, on solar power. Water reads about {water} t/yr at 5 wt%, identical to Artemis Prospecting because both run 5 wt% at the shared branch envelope. The 2030 branch year is common to all three scenarios.',
+      claims:['C17','C26','C52','C41','C53']},
+    'BASE-HIGH-2040':{key:'BASE-HIGH-2040', envClaim:'C18', waterClaim:'C27',
+      text:'The Commercial Break at the Pilot phase, on fission power. About {power} kW and {mass} t landed; water reads about {water} t/yr at 5 wt%. The power side is contextually supported by the fission-power directive ISRU priority, a design or requirement number.',
+      claims:['C18','C27']},
+    'BASE-HIGH-2055':{key:'BASE-HIGH-2055', envClaim:'C19', waterClaim:'C28',
+      text:'The Commercial Break at the Sustained phase, on fission power. About {power} kW and {mass} t landed; water reads about {water} t/yr at 5 wt%. This is the top of the separation strip, roughly two orders above Contested and about seven times Artemis, driven by capital and geology together. The workbook adds a 3 to 6 MW industrial alternate here, cross-linked to the Kornuta industrial anchor, a design figure.',
+      claims:['C19','C28','C57']}
+  },
+  ice: {
+    'MOD-ICE-LEAN':{key:'MOD-ICE-LEAN',
+      text:'Lean geology below 2 wt%. Installed energy runs above 30,000 kWh per tonne of water and climbs steeply, roughly five times the 5 wt% figure at 1 wt%, so about {rho} tonnes of regolith move per tonne of water. This band sits at or below the roughly 4 wt% thermal-mining floor, so most process heat warms barren regolith rather than subliming ice. Area-average measurements of about 0.5 to 1.5 wt% fall here. Treat water in this band as demonstration scale and grade honest but economically marginal, not a settled t/yr achievable at grade.',
+      claims:['C01','C03','C53','BC1']},
+    'MOD-ICE-NOMINAL':{key:'MOD-ICE-NOMINAL',
+      text:'Calibrated central band, 2 to 8 wt%. At 5 wt%, the LCROSS point value, the model delivers about 7.4 kWh per kg water at a {rho} to 1 regolith-to-water ratio, consistent with the held excavate-and-heat design point. Water scales cleanly with power and states stay power limited. The energy constant is a mature-plant DESIGN target, roughly two to six times better than the only integrated demonstration.',
+      claims:['C03','C53','C41']},
+    'MOD-ICE-RICH':{key:'MOD-ICE-RICH',
+      text:'Rich geology above 8 wt%, toward the pore-filling and detection ceiling, with about {rho} tonnes of regolith per tonne of water. Specific energy per kg falls further and water tracks power almost linearly. The upper detent near 30 wt% is the intimate-mix maximum seen in isolated ice-bearing pixels, not a mineable seam, and it cannot be resolved from orbit. Label rich-band output an optimistic upper bound, not a measured resource.',
+      claims:['C41','C53','BC1']}
+  },
+  fission: {
+    'MOD-FISSION-ON':{key:'MOD-FISSION-ON',
+      text:'Fission on: power-system mass runs about 0.15 t per kWe, roughly 6.67 W per kg. This is a DESIGN and REQUIREMENT figure on unbuilt hardware, from the 2025 Fission Surface Power directive minimum of at least 100 kWe within a 15 t landed allocation; the largest reactor ground-tested to date validated the physics at only about 1 kWe electric. State it as a design or requirement number and never imply a 100 kWe reactor has flown. The model draws power mass as a straight line through zero, so true specific mass is worse at pilot scale.',
+      claims:['C04','C29']},
+    'MOD-FISSION-OFF':{key:'MOD-FISSION-OFF',
+      text:'Fission off: power now costs about 2.5 t per kWe, flagged as battery mass only, before arrays and power management, on a 354 hour permanently shadowed night-survival basis. Whether this merely eats mining mass or flips the binding regime depends on the state. Storage specific energy, battery about 200 Wh per kg versus regenerative fuel cell about 456 to 830 Wh per kg, is the undemonstrated variable that sets the penalty. A near eternal-light ridge would be far lighter but such terrain is scarce, capped near about 6 MW at the sites above 90 percent illumination. Which siting a solar number assumes is load bearing and should be stated.',
+      claims:['C05','C44','C45','C04']}
+  },
+  phi_c: {
+    'MOD-PHIC-WATER':{key:'MOD-PHIC-WATER',
+      text:'Water-focused split at or below 0.2 construction share. Construction is a modest side stream and water is the headline product. This is the Artemis and Commercial default of 0.05, where water reads at or near the base figure, reduced only by the small construction share.',
+      claims:['C31','C34']},
+    'MOD-PHIC-MIXED':{key:'MOD-PHIC-MIXED',
+      text:'Dual-product split at a construction share of 0.3 to 0.4, with neither product dominant. Water still takes the larger share, about 70 percent at 0.3 and about 60 percent at 0.4, while construction runs as a genuine co-product rather than a modest side stream. The headline has not yet flipped to construction; water remains primary but reads materially below its full figure. The split is frictionless in the model, which is optimistic, since a real dual-product plant pays a reconfiguration cost in feed prep, temperature, and product handling. Any construction tonnage at this split, currently about {construction} t/yr, is a DESIGN-basis order-of-magnitude figure that swings with the assumed sinter energy: a DESIGN value near 0.33 kWh per kg, the app estimate near 0.83, and a demonstrated bench value pending and not held. Present it as design basis, never a firm number.',
+      claims:['C31','C34','C08','C09']},
+    'MOD-PHIC-CONSTRUCTION':{key:'MOD-PHIC-CONSTRUCTION',
+      text:'Construction-focused split at or above 0.5: the headline product flips from water to construction. This is the Contested Foundations default of 0.60 and the single highest-stakes premise in the tool, where water drops toward roughly 1 t/yr while sintered construction becomes the headline at about {construction} t/yr on the app sinter-energy basis. Mandatory DESIGN caveat when quoting any construction tonnage: it rests on the app sinter-energy assumption near 0.83 kWh per kg, an unsourced engineering estimate; the sourced DESIGN value is about 0.33 kWh per kg, and the demonstrated bench energy is UNVERIFIED and pending, not in any held source. These tonnages are order-of-magnitude DESIGN figures that swing with which sinter energy is used. The 0.60 split is a scenario stance, not a sourced fact.',
+      claims:['C31','C34','C08','C09']}
+  },
+  regime: {
+    'REGIME-POWER':{key:'REGIME-POWER',
+      text:'Power limited, the healthy regime. Water scales with power; adding mass does not help because the plant already out-processes what the power can sublime. All nine canonical envelope points sit here by calibration. The throughput ceiling rests on the plant coefficient kExc, a calibrated assumption and disclosed construct, not a measurement.',
+      claims:['C30','C06']},
+    'REGIME-MASS':{key:'REGIME-MASS',
+      text:'Landed-mass limited: the mining plant is starved, too little landed mass is left after the power system takes its share, so throughput, not power, caps water. Adding power does not help; adding mining mass does. The throughput ceiling rests on kExc, the model weakest self-flagged number and a disclosed construct; every bound in the literature suggests the real value is roughly one to one and a half orders more generous, so treat any mass-limited reading as conservative. The model also books all non-power landed mass as productive plant, an UNVERIFIED-pending overhead assumption.',
+      claims:['C06','C07','C30','C32']},
+    'REGIME-POWERMASS':{key:'REGIME-POWERMASS',
+      text:'Power-system-mass limited: the power system consumes the entire landed mass and nothing is left for the plant, so water goes to zero. This is the extreme of the mass penalty, typically a high-power solar state with little landed mass. Use only the qualitative point that the model books all non-power mass as plant, an UNVERIFIED-pending overhead assumption.',
+      claims:['C07','C29','C32','C05']}
+  }
+};
+
+/* selection: numeric bands read from modelOut (raw values); base key
+   from state.funding/phase; regime from modelOut.binding. Total, gap-free. */
+function selectBlurbKeys(state, m){
+  const baseKey = 'BASE-' + String(state.funding).toUpperCase() + '-' + state.phase;
+  const iceV = m.ice;
+  const iceKey = iceV < 2 ? 'MOD-ICE-LEAN' : (iceV <= 8 ? 'MOD-ICE-NOMINAL' : 'MOD-ICE-RICH');
+  const fisKey = m.fission ? 'MOD-FISSION-ON' : 'MOD-FISSION-OFF';
+  const phiV = m.phi_c;
+  const phiKey = phiV <= 0.2 ? 'MOD-PHIC-WATER' : (phiV < 0.5 ? 'MOD-PHIC-MIXED' : 'MOD-PHIC-CONSTRUCTION');
+  const regMap = {'power':'REGIME-POWER','landed mass':'REGIME-MASS','power-system mass':'REGIME-POWERMASS'};
+  const regKey = regMap[m.binding] || 'REGIME-POWER';
+  return {base:baseKey, ice:iceKey, fission:fisKey, phi_c:phiKey, regime:regKey};
+}
+
+/* stale-anchor dual-render for BASE-MED-2040 (C12 / C21). Both pairs,
+   dated, neither quoted as settled; the workbook pair is a flagged live
+   annotation, exempt from the live-number reconcile. */
+function staleRender(m, live){
+  live.push({field:'power', value:100,  claim:'C12', flagged:true});
+  live.push({field:'water', value:71.4, claim:'C21', flagged:true});
+  return ' App reading, pre-directive: about 45 kW and about 32 t/yr water. Workbook reading, corrected 2025-08-04 under the Fission Surface Power directive minimum of at least 100 kWe for surface operations including ISRU: about 100 kW and about 70 t/yr water, where the 100 kWe is a DESIGN and REQUIREMENT on unbuilt hardware. This cell is stale in the live app and pending recalibration, so neither pair should be quoted on its own.';
+}
+
+/* composeBlurb(state, modelOut) -> structured object.
+   parts holds the selected KEYS (resolve in the pool); text is the
+   rendered prose; live lists every state-dependent number interpolated,
+   tagged with its model() field, claim, and flagged status. */
+function composeBlurb(state, m){
+  const keys = selectBlurbKeys(state, m);
+  const base = BLURB.base[keys.base];
+  const ice  = BLURB.ice[keys.ice];
+  const fis  = BLURB.fission[keys.fission];
+  const phi  = BLURB.phi_c[keys.phi_c];
+  const reg  = BLURB.regime[keys.regime];
+  const live = [];
+  const baseCtx = {live, envClaim:base.envClaim, waterClaim:base.waterClaim};
+  const noCtx   = {live, envClaim:null, waterClaim:null};
+  let baseText = subst(base.text, m, baseCtx);
+  if(base.stale) baseText += staleRender(m, live);
+  const iceText = subst(ice.text, m, noCtx);
+  const fisText = subst(fis.text, m, noCtx);
+  const phiText = subst(phi.text, m, noCtx);
+  const regText = subst(reg.text, m, noCtx);
+  const claimSet = [];
+  [base, ice, fis, phi, reg].forEach(f=>f.claims.forEach(c=>{ if(claimSet.indexOf(c)<0) claimSet.push(c); }));
+  const text = [baseText, iceText, fisText, phiText, regText].join(' ');
+  return { text, parts:keys, live, claims:claimSet,
+           rendered:{base:baseText, ice:iceText, fission:fisText, phi_c:phiText, regime:regText} };
+}
+
+/* ============================================================
+   BLURB TEST HARNESS — runBlurbTests(fileText) -> [{id,tier,name,pass,detail}]
+   BL1-BL9 run headless; BL10 is a REVIEW source-presence proxy for the
+   DOM panel (fully exercised in-page). Same record shape as runTests().
+   ============================================================ */
+function runBlurbTests(fileText){
+  const R = [];
+  const rec = (id,tier,name,pass,detail)=>R.push({id,tier,name,pass:!!pass,detail:detail||''});
+  const HEDGE = /pending|unverified|design|assumption|calibrated|not a firm number|disclosed construct/i;
+  // build modelOut + state + composed blurb for a knob spec
+  const build = (o)=>{
+    const phi = (o.phi_c==null) ? 0.05 : o.phi_c;
+    const mo = model({ice:o.ice, power:o.power, mass:o.mass, fission:o.fission, phi_c:phi, funding:o.funding, phase:o.phase});
+    const st = {funding:o.funding, phase:o.phase, fission:o.fission, ice:o.ice, phi_c:phi};
+    return {mo, st, cb:composeBlurb(st, mo)};
+  };
+
+  // ---- BL1: fragment selection correctness (base + 4 fragments) ----
+  {
+    const rows = [
+      {s:{funding:'low', phase:'2030', ice:1,  power:1,   mass:10,   fission:false, phi_c:0.60}, e:{base:'BASE-LOW-2030', ice:'MOD-ICE-LEAN',    fission:'MOD-FISSION-OFF', phi_c:'MOD-PHIC-CONSTRUCTION', regime:'REGIME-POWER'}},
+      {s:{funding:'low', phase:'2040', ice:1,  power:10,  mass:75,   fission:false, phi_c:0.60}, e:{base:'BASE-LOW-2040', ice:'MOD-ICE-LEAN',    fission:'MOD-FISSION-OFF', phi_c:'MOD-PHIC-CONSTRUCTION', regime:'REGIME-POWER'}},
+      {s:{funding:'low', phase:'2055', ice:1,  power:20,  mass:150,  fission:true,  phi_c:0.60}, e:{base:'BASE-LOW-2055', ice:'MOD-ICE-LEAN',    fission:'MOD-FISSION-ON',  phi_c:'MOD-PHIC-CONSTRUCTION', regime:'REGIME-POWER'}},
+      {s:{funding:'med', phase:'2030', ice:5,  power:1,   mass:10,   fission:false, phi_c:0.05}, e:{base:'BASE-MED-2030', ice:'MOD-ICE-NOMINAL', fission:'MOD-FISSION-OFF', phi_c:'MOD-PHIC-WATER',        regime:'REGIME-POWER'}},
+      {s:{funding:'med', phase:'2040', ice:5,  power:45,  mass:200,  fission:true,  phi_c:0.05}, e:{base:'BASE-MED-2040', ice:'MOD-ICE-NOMINAL', fission:'MOD-FISSION-ON',  phi_c:'MOD-PHIC-WATER',        regime:'REGIME-POWER'}},
+      {s:{funding:'med', phase:'2055', ice:5,  power:150, mass:1000, fission:true,  phi_c:0.05}, e:{base:'BASE-MED-2055', ice:'MOD-ICE-NOMINAL', fission:'MOD-FISSION-ON',  phi_c:'MOD-PHIC-WATER',        regime:'REGIME-POWER'}},
+      {s:{funding:'high',phase:'2030', ice:5,  power:1,   mass:10,   fission:false, phi_c:0.05}, e:{base:'BASE-HIGH-2030',ice:'MOD-ICE-NOMINAL', fission:'MOD-FISSION-OFF', phi_c:'MOD-PHIC-WATER',        regime:'REGIME-POWER'}},
+      {s:{funding:'high',phase:'2040', ice:5,  power:120, mass:1000, fission:true,  phi_c:0.05}, e:{base:'BASE-HIGH-2040',ice:'MOD-ICE-NOMINAL', fission:'MOD-FISSION-ON',  phi_c:'MOD-PHIC-WATER',        regime:'REGIME-POWER'}},
+      {s:{funding:'high',phase:'2055', ice:5,  power:1000,mass:10000,fission:true,  phi_c:0.05}, e:{base:'BASE-HIGH-2055',ice:'MOD-ICE-NOMINAL', fission:'MOD-FISSION-ON',  phi_c:'MOD-PHIC-WATER',        regime:'REGIME-POWER'}},
+      {s:{funding:'med', phase:'2055', ice:13, power:150, mass:1000, fission:true,  phi_c:0.05}, e:{base:'BASE-MED-2055', ice:'MOD-ICE-RICH',    fission:'MOD-FISSION-ON',  phi_c:'MOD-PHIC-WATER',        regime:'REGIME-POWER'}},
+      {s:{funding:'med', phase:'2055', ice:5,  power:45,  mass:200,  fission:false, phi_c:0.05}, only:['ice','fission','phi_c','regime'], e:{ice:'MOD-ICE-NOMINAL', fission:'MOD-FISSION-OFF', phi_c:'MOD-PHIC-WATER', regime:'REGIME-MASS'}}
+    ];
+    let ok=true, why=[];
+    rows.forEach((row,i)=>{
+      const {cb} = build(row.s);
+      const fields = row.only || ['base','ice','fission','phi_c','regime'];
+      for(const f of fields){ if(cb.parts[f]!==row.e[f]){ ok=false; why.push(`row${i+1}.${f}=${cb.parts[f]}!=${row.e[f]}`); } }
+    });
+    rec('BL1','GATE','fragment selection correctness (base + 4 fragments)', ok, ok?`all ${rows.length} rows select correctly`:why.join('  '));
+  }
+
+  // ---- BL2: ice-band boundary edges vs the real detents ----
+  {
+    const bg={funding:'med', phase:'2055', power:150, mass:1000, fission:true, phi_c:0.05};
+    const edge=(iceV)=>build({...bg, ice:iceV}).cb.parts.ice;
+    const checks=[[1.5,'MOD-ICE-LEAN'],[2,'MOD-ICE-NOMINAL'],[7,'MOD-ICE-NOMINAL'],[8.5,'MOD-ICE-RICH'],[1,'MOD-ICE-LEAN'],[30,'MOD-ICE-RICH']];
+    let ok=true, why=[]; checks.forEach(([v,k])=>{ const g=edge(v); if(g!==k){ ok=false; why.push(`ice${v}=${g}!=${k}`); } });
+    rec('BL2','GATE','ice-band boundary edges vs detents (2.0 and 8.0 cuts)', ok, ok?'1.5/2/7/8.5/1/30 all land correctly':why.join('  '));
+  }
+
+  // ---- BL3: phi_c boundary + 3-band totality ----
+  {
+    const bg={funding:'med', phase:'2055', ice:5, power:150, mass:1000, fission:true};
+    const band=(p)=>build({...bg, phi_c:p}).cb.parts.phi_c;
+    let ok=true, why=[];
+    const anch=[[0.2,'MOD-PHIC-WATER'],[0.3,'MOD-PHIC-MIXED'],[0.4,'MOD-PHIC-MIXED'],[0.5,'MOD-PHIC-CONSTRUCTION']];
+    anch.forEach(([p,k])=>{ const g=band(p); if(g!==k){ ok=false; why.push(`phi${p}=${g}!=${k}`); } });
+    const rank={'MOD-PHIC-WATER':0,'MOD-PHIC-MIXED':1,'MOD-PHIC-CONSTRUCTION':2};
+    let prev=-1, mono=true;
+    for(const p of DETENTS.phi_c){
+      const k=band(p);
+      if(!(k in rank) || !BLURB.phi_c[k] || !BLURB.phi_c[k].text){ ok=false; why.push(`phi${p} undefined/empty`); continue; }
+      if(rank[k]<prev){ mono=false; why.push(`phi${p} non-monotonic (${k} after rank ${prev})`); }
+      prev=rank[k];
+    }
+    ok = ok && mono;
+    rec('BL3','GATE','phi_c 3-band totality + monotonicity (WATER/MIXED/CONSTRUCTION over all 13 detents)', ok, ok?'0.2->WATER, 0.3/0.4->MIXED, 0.5->CONSTRUCTION; all 13 mapped, monotonic':why.join('  '));
+  }
+
+  // ---- BL4: live-number consistency to model() + anti-hard-code perturbation ----
+  {
+    const cells=[
+      {funding:'med', phase:'2030', ice:5, power:1,   mass:10,   fission:false},
+      {funding:'med', phase:'2040', ice:5, power:45,  mass:200,  fission:true},
+      {funding:'med', phase:'2055', ice:5, power:150, mass:1000, fission:true},
+      {funding:'low', phase:'2030', ice:1, power:1,   mass:10,   fission:false},
+      {funding:'low', phase:'2040', ice:1, power:10,  mass:75,   fission:false},
+      {funding:'low', phase:'2055', ice:1, power:20,  mass:150,  fission:true, phi_c:0.60},
+      {funding:'high',phase:'2030', ice:5, power:1,   mass:10,   fission:false},
+      {funding:'high',phase:'2040', ice:5, power:120, mass:1000, fission:true},
+      {funding:'high',phase:'2055', ice:5, power:1000,mass:10000,fission:true},
+      {funding:'med', phase:'2055', ice:13,power:150, mass:1000, fission:true, phi_c:0.30},
+      {funding:'med', phase:'2055', ice:5, power:45,  mass:200,  fission:false}
+    ];
+    const tol=(field,val)=>{
+      if(field==='rho'||field==='ice') return 0.05;
+      const a=Math.abs(val);
+      if(a>=100) return Math.max(0.5, a*0.01);
+      if(a>=10)  return 0.05;
+      return 0.005;
+    };
+    let ok=true, why=[];
+    // equality reconcile (non-flagged entries)
+    for(const c of cells){
+      const {mo,cb}=build(c);
+      for(const e of cb.live){
+        if(e.flagged) continue;
+        if(!(e.field in mo)){ ok=false; why.push(`${e.field} not a model key`); continue; }
+        if(Math.abs(e.value-mo[e.field])>tol(e.field,mo[e.field])){ ok=false; why.push(`${c.funding}/${c.phase} ${e.field} ${e.value}!=${mo[e.field]}`); }
+      }
+    }
+    // anti-hard-code: bump power one detent up; each non-flagged live number
+    // must (i) still equal the RE-computed model() output at the new state and
+    // (ii) move the same direction model() moved. A frozen constant fails (i)
+    // at the perturbed state; a stale copy fails (ii). Note water need NOT rise
+    // with power: at fission-off mass-tight states raising power starves the
+    // plant and water falls — the test asserts tracking, not monotonicity.
+    let pertOK=true, moved=false;
+    for(const c of cells){
+      const idx=DETENTS.power.indexOf(c.power);
+      if(idx<0 || idx>=DETENTS.power.length-1) continue;
+      const a=build(c), b=build({...c, power:DETENTS.power[idx+1]});
+      for(const field of ['water','power']){
+        const eA=a.cb.live.find(e=>e.field===field&&!e.flagged);
+        const eB=b.cb.live.find(e=>e.field===field&&!e.flagged);
+        if(eB && Math.abs(eB.value-b.mo[field])>tol(field,b.mo[field])){ pertOK=false; why.push(`${field} not tracking model at perturbed ${c.funding}/${c.phase} (${eB.value} vs ${b.mo[field]})`); }
+        if(eA && eB && Math.abs(a.mo[field]-b.mo[field])>1e-9){
+          moved=true;
+          if(Math.sign(eB.value-eA.value)!==Math.sign(b.mo[field]-a.mo[field])){ pertOK=false; why.push(`${field} direction wrong ${c.funding}/${c.phase}`); }
+        }
+      }
+    }
+    if(!moved){ pertOK=false; why.push('perturbation never moved a live number (no teeth)'); }
+    rec('BL4','GATE','live numbers reconcile to model() and track under perturbation (anti-hard-code)', ok&&pertOK, (ok&&pertOK)?'all live values equal model() at both states and move with it':why.slice(0,4).join('  '));
+  }
+
+  // ---- BL5: claim-ID resolution (folded also into BL8) ----
+  {
+    const cells=[['low','2030'],['low','2040'],['low','2055'],['med','2030'],['med','2040'],['med','2055'],['high','2030'],['high','2040'],['high','2055']];
+    let ok=true, why=[];
+    for(const [f,ph] of cells){
+      const e=envelope(f,ph);
+      const {cb}=build({funding:f, phase:ph, ice:5, power:e.P, mass:e.M, fission:e.fission, phi_c:(f==='low'?0.60:0.05)});
+      for(const id of cb.claims){
+        if(!CLAIMS[id] || !CLAIMS[id].source || !CLAIMS[id].source.length){ ok=false; why.push(`${f}/${ph} dangling ${id}`); }
+      }
+    }
+    rec('BL5','GATE','every referenced claim ID resolves in CLAIMS (no dangling)', ok, ok?'all base+fragment claim IDs resolve to non-empty sources':why.slice(0,5).join('  '));
+  }
+
+  // ---- BL6: no-pending-number-asserted (hedge present; pending live flagged) ----
+  {
+    const groupMap={base:'base',ice:'ice',fission:'fission',phi_c:'phi_c',regime:'regime'};
+    const cells=[
+      {funding:'med', phase:'2055', ice:5, power:45,  mass:200,  fission:false, phi_c:0.05}, // REGIME-MASS path
+      {funding:'low', phase:'2055', ice:1, power:20,  mass:150,  fission:true,  phi_c:0.60}, // CONSTRUCTION path
+      {funding:'med', phase:'2055', ice:5, power:150, mass:1000, fission:true,  phi_c:0.30}, // MIXED path
+      {funding:'high',phase:'2055', ice:5, power:1000,mass:10000,fission:true,  phi_c:0.05}, // REGIME-POWER (C06) path
+      {funding:'med', phase:'2055', ice:5, power:150, mass:5,    fission:false, phi_c:0.05}  // REGIME-POWERMASS path (power eats all mass)
+    ];
+    let ok=true, why=[];
+    for(const c of cells){
+      const {cb}=build(c);
+      // (a) any fragment citing a pending claim must carry a hedge marker in its rendered text
+      for(const g of Object.keys(groupMap)){
+        const key=cb.parts[g]; const obj=BLURB[groupMap[g]][key];
+        const touches=obj.claims.some(id=>BLURB_PENDING.indexOf(id)>=0);
+        if(touches && !HEDGE.test(cb.rendered[g])){ ok=false; why.push(`${key} touches pending but no hedge`); }
+      }
+      // (b) no live entry sourced to a pending claim may be un-flagged
+      for(const e of cb.live){
+        if(BLURB_PENDING.indexOf(e.claim)>=0 && !e.flagged){ ok=false; why.push(`live ${e.field} on pending ${e.claim} unflagged`); }
+      }
+    }
+    rec('BL6','GATE','pending claims never render a bare settled number (hedged; pending live flagged)', ok, ok?'mass, construction, mixed, power, and power-mass paths all hedged':why.slice(0,4).join('  '));
+  }
+
+  // ---- BL7: S1-2040 stale-anchor dual-render ----
+  {
+    const {mo,cb}=build({funding:'med', phase:'2040', ice:5, power:45, mass:200, fission:true, phi_c:0.05});
+    const t=cb.text;
+    const liveWater=cb.live.find(e=>e.field==='water'&&!e.flagged);
+    const livePower=cb.live.find(e=>e.field==='power'&&!e.flagged);
+    const flagged=cb.live.find(e=>e.flagged===true);
+    const livePairOK = !!liveWater && Math.abs(liveWater.value-mo.water)<=0.5 && !!livePower && Math.abs(livePower.value-45)<0.5;
+    const workbookOK = /100/.test(t) && /70/.test(t) && !!flagged;
+    const dateOK = /2025/.test(t) && /directive/i.test(t);
+    const staleOK = /(stale|pre-directive|pending recalibration)/i.test(t);
+    const neitherSettled = !/settled|final/i.test(t);
+    const pass = livePairOK && workbookOK && dateOK && staleOK && neitherSettled;
+    rec('BL7','GATE','S1-2040 stale-anchor dual-render (45/~32 live + 100/~70 flagged, dated, neither settled)', pass,
+        pass?'both pairs present, dated 2025-08-04, stale-flagged, neither settled':`live=${livePairOK} wb=${workbookOK} date=${dateOK} stale=${staleOK} neither=${neitherSettled}`);
+  }
+
+  // ---- BL8: detent coverage sweep, no undefined/throw; folds BL5 ----
+  {
+    let ok=true, why=[], n=0;
+    const fundings=['low','med','high'], phases=['2030','2040','2055'];
+    const railP=DETENTS.power, railM=DETENTS.mass;
+    const check=(st,mo)=>{
+      let cb;
+      try{ cb=composeBlurb(st,mo); }catch(ex){ ok=false; why.push(`throw ${ex.message}`); return; }
+      if(!cb.text || !cb.text.length){ ok=false; why.push('empty text'); }
+      for(const g of ['base','ice','fission','phi_c','regime']){
+        const map=(g==='phi_c')?'phi_c':g;
+        const key=cb.parts[g], obj=BLURB[map][key];
+        if(!obj || !obj.text || !obj.text.length){ ok=false; why.push(`${g}=${key} undefined/empty`); }
+        if(!cb.rendered[g] || !cb.rendered[g].length){ ok=false; why.push(`${g} rendered empty`); }
+      }
+      for(const id of cb.claims){ if(!CLAIMS[id]||!CLAIMS[id].source){ ok=false; why.push(`dangling ${id}`); } }
+    };
+    // envelope-driven pass: 16 ice x 3 funding x 3 phase x 2 fission x 13 phi_c
+    for(const ice of DETENTS.ice) for(const f of fundings) for(const ph of phases) for(const fis of [true,false]) for(const p of DETENTS.phi_c){
+      const e=envelope(f,ph);
+      const mo=model({ice, power:e.P, mass:e.M, fission:fis, phi_c:p, funding:f, phase:ph});
+      const st={funding:f, phase:ph, fission:fis, ice, phi_c:p};
+      check(st,mo); n++;
+    }
+    // rail-fuzz pass: force off-envelope power/mass so REGIME-MASS/POWERMASS branches fire
+    for(const ice of [DETENTS.ice[0],DETENTS.ice[6],DETENTS.ice[15]]) for(const f of fundings) for(const ph of phases) for(const fis of [true,false])
+      for(const P of [railP[0],railP[7],railP[15]]) for(const M of [railM[0],railM[5],railM[15]]) for(const p of [0,0.3,0.6]){
+        const mo=model({ice, power:P, mass:M, fission:fis, phi_c:p, funding:f, phase:ph});
+        const st={funding:f, phase:ph, fission:fis, ice, phi_c:p};
+        check(st,mo); n++;
+      }
+    rec('BL8','GATE','detent coverage sweep, every state composes (no undefined/throw); claim IDs resolve', ok, ok?`${n} states swept, all valid, all claims resolve`:why.slice(0,4).join('  '));
+  }
+
+  // ---- BL9: non-regression + MODEL-CORE / BLURB-CORE separation ----
+  {
+    let ok=true, why=[];
+    const pre = (typeof runTests==='function') ? runTests(fileText) : [];
+    const preGate = pre.filter(r=>r.tier==='GATE');
+    const preFail = preGate.filter(r=>!r.pass);
+    if(preFail.length){ ok=false; why.push('A-gates failing: '+preFail.map(r=>r.id).join(',')); }
+    const a4 = pre.find(r=>r.id==='A4');
+    if(!a4 || !a4.pass){ ok=false; why.push('A4 (coefficient sourcing) not green'); }
+    if(typeof fileText==='string' && fileText.length){
+      const mS='MODEL-CORE:'+'START', mE='MODEL-CORE:'+'END', bS='BLURB-CORE:'+'START', bE='BLURB-CORE:'+'END';
+      const iMS=fileText.indexOf(mS), iME=fileText.indexOf(mE), iBS=fileText.indexOf(bS), iBE=fileText.indexOf(bE);
+      if(!(iMS>=0 && iME>iMS)){ ok=false; why.push('MODEL-CORE markers broken'); }
+      if(!(iBS>=0 && iBE>iBS)){ ok=false; why.push('BLURB-CORE markers broken'); }
+      if(!(iBS>iME)){ ok=false; why.push('BLURB-CORE not a separate region after MODEL-CORE'); }
+    } else { why.push('(no fileText: marker check skipped)'); }
+    rec('BL9','GATE','non-regression: pre-existing A-gates green, MODEL-CORE intact and BLURB-CORE separate', ok,
+        ok?`${preGate.length-preFail.length}/${preGate.length} pre-existing GATEs green; markers intact and separated`:why.join('  '));
+  }
+
+  // ---- BL10: panel live-render + inline provenance (REVIEW; DOM proxy) ----
+  {
+    let pass=true, why=[];
+    if(typeof fileText==='string' && fileText.length){
+      if(!/id=["']blurbPanel["']/.test(fileText)){ pass=false; why.push('no blurbPanel element'); }
+      if(!/renderBlurbPanel\s*\(/.test(fileText)){ pass=false; why.push('renderBlurbPanel not wired'); }
+      if(!/composeBlurb\s*\(/.test(fileText)){ pass=false; why.push('composeBlurb not called'); }
+      if(!/data-cid/.test(fileText)){ pass=false; why.push('no provenance affordance (data-cid)'); }
+    } else { why.push('no fileText'); pass=false; }
+    rec('BL10','REVIEW','panel live-render + inline provenance expand (verified in-page; source-presence proxy headless)', pass,
+        pass?'panel element, live render call, composeBlurb, and provenance affordance all present':why.join('  '));
+  }
+
+  return R;
+}
+/* ===== BLURB-CORE:END ===== */
+
+/* ============================================================
    NARRATIVES + PRESETS (app-layer, not physics)
    ============================================================ */
 /* Presets set the ACTIVE scenario (funding + geology + construction split).
@@ -858,6 +1359,7 @@ function render(){
 
   updateStrip(m);
   drawField(m);
+  renderBlurbPanel(m);
 }
 
 /* ---- operating-regime field: X=landed mass, Y=power --------------- */
@@ -951,6 +1453,46 @@ function updateStrip(m){
 }
 
 /* ============================================================
+   STATE-BRIEFING BLURB PANEL (app-layer wrapper over the DOM-free
+   composeBlurb in BLURB-CORE). Re-renders on every knob change with
+   live model() numbers and inline-expandable provenance.
+   ============================================================ */
+function renderBlurbPanel(m){
+  const el=document.getElementById('blurbPanel');
+  const b=composeBlurb(state, m);
+  const chips=b.claims.map(id=>{
+    const pend=BLURB_PENDING.indexOf(id)>=0;
+    return `<button type="button" class="chip${pend?' pend':''}" data-cid="${id}" aria-expanded="false" aria-controls="claimDetail">${id}</button>`;
+  }).join('');
+  const order=['base','ice','fission','phi_c','regime'];
+  el.innerHTML =
+    `<div class="blurbhead"><span class="bt">State briefing</span><span class="bk">live from the model &middot; updates on every knob</span></div>`+
+    `<div class="blurbbody">`+order.map(k=>`<p class="blurbtext" data-part="${k}"></p>`).join('')+`</div>`+
+    `<div class="claimwrap"><div class="clab">Provenance &middot; tap a claim to read its source</div>`+
+    `<div class="claimchips">${chips}</div>`+
+    `<div class="claimdetail" id="claimDetail" role="region" aria-live="polite" hidden></div></div>`;
+  // one paragraph per fragment (base / ice / fission / phi_c / regime); plain
+  // text via textContent so no markup is injected.
+  order.forEach(k=>{ el.querySelector(`.blurbtext[data-part="${k}"]`).textContent=b.rendered[k]; });
+}
+// Inline provenance expand — delegated on the persistent panel node so it
+// survives the innerHTML re-render on every knob change.
+document.getElementById('blurbPanel').addEventListener('click',e=>{
+  const chip=e.target.closest('.chip'); if(!chip) return;
+  const det=document.getElementById('claimDetail');
+  const wasOpen=chip.getAttribute('aria-expanded')==='true';
+  document.querySelectorAll('#blurbPanel .chip').forEach(c=>c.setAttribute('aria-expanded','false'));
+  if(wasOpen){ det.hidden=true; return; }
+  const id=chip.dataset.cid, c=CLAIMS[id];
+  if(!c){ det.hidden=true; return; }
+  chip.setAttribute('aria-expanded','true');
+  const pend=/pending/i.test(c.status);
+  det.innerHTML=`<span class="cid">${id}</span><span class="cstat ${pend?'pend':'ok'}">${c.status}</span><div class="csrc"></div>`;
+  det.querySelector('.csrc').textContent=c.source;   // plain text
+  det.hidden=false;
+});
+
+/* ============================================================
    REFERENCE PAGE (equations + sources)
    ============================================================ */
 function badge(status){ const c=/SOURCED|CONSTANT/.test(status)?'src':(/CONTROL/.test(status)?'ctl':'asm'); return `<span class="badge ${c}">${status}</span>`; }
@@ -1003,7 +1545,8 @@ function buildRefPage(){
    ============================================================ */
 function renderDevPanel(){
   const el=document.getElementById('devpanel');
-  const res=runTests(document.documentElement.outerHTML);
+  const html=document.documentElement.outerHTML;
+  const res=runTests(html).concat(runBlurbTests(html));
   const gate=res.filter(r=>r.tier==='GATE'), rev=res.filter(r=>r.tier==='REVIEW');
   const gPass=gate.filter(r=>r.pass).length, rPass=rev.filter(r=>r.pass).length;
   const rows=res.map(r=>`<tr><td>${r.id}</td><td>${r.tier}</td><td class="${r.pass?'p':'f'}">${r.pass?'PASS':'FAIL'}</td><td>${r.name}</td><td>${r.detail}</td></tr>`).join('');
